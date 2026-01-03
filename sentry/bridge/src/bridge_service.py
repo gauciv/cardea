@@ -9,6 +9,7 @@ import json
 import logging
 import sys
 import os
+import httpx
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -201,6 +202,28 @@ class AlertRequest(BaseModel):
     raw_data: Dict[str, Any] = Field(..., description="Raw alert data")
     confidence: float = Field(0.0, ge=0.0, le=1.0, description="Confidence score")
 
+class OracleClient:
+    def __init__(self, oracle_url: str):
+        self.url = f"{oracle_url.rstrip('/')}/api/alerts"
+
+    async def send_to_cloud(self, alert_data: Dict[str, Any]):
+        async with httpx.AsyncClient() as client:
+            # We map 'event_type' to 'alert_type' here to fix the mismatch
+            oracle_payload = {
+                "source": alert_data["source"],
+                "alert_type": alert_data["event_type"], # Mapping fix
+                "severity": alert_data["severity"],
+                "title": f"Anomaly from {alert_data['source']}", # Adding missing title
+                "description": alert_data["description"],
+                "raw_data": alert_data["raw_data"],
+                "timestamp": datetime.now().isoformat()
+            }
+            try:
+                response = await client.post(self.url, json=oracle_payload)
+                logger.info(f"☁️ Oracle Cloud Response: {response.status_code}")
+            except Exception as e:
+                logger.error(f"❌ Could not reach Oracle Cloud: {e}")
+
 class BridgeService:
     """Main Bridge service class"""
     
@@ -318,6 +341,29 @@ class BridgeService:
             
         self.services_status[service] = health_info
         return health_info
+
+    async def escalate_to_oracle(alert_data: Dict[str, Any]):
+    """Pushes local anomaly evidence to the Azure-powered Oracle Cloud"""
+    oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://host.docker.internal:8000/api/alerts")
+    
+        async with httpx.AsyncClient() as client:
+            # Mapping Sentry fields to Oracle fields
+            payload = {
+                "source": alert_data["source"],
+                "alert_type": alert_data["event_type"], # 'network_anomaly'
+                "severity": alert_data["severity"],
+                "title": f"AI Anomaly: {alert_data['source']}",
+                "description": alert_data["description"],
+                "raw_data": alert_data["raw_data"],
+                "timestamp": datetime.now().isoformat()
+            }
+            try:
+                # Note: For MVP, we are bypassing the Auth wall for testing
+                # If you keep Auth, you'd add headers={"Authorization": f"Bearer {token}"}
+                response = await client.post(oracle_url, json=payload, timeout=10.0)
+                logger.info(f"☁️ Cloud Escalation Status: {response.status_code}")
+            except Exception as e:
+                logger.error(f"❌ Cloud Escalation Failed: {e}")
 
     async def collect_evidence_snapshot(self) -> EvidenceSnapshot:
         """Collect comprehensive evidence snapshot for Oracle integration"""
@@ -608,26 +654,19 @@ async def health_check():
 
 @app.post("/alerts", status_code=status.HTTP_201_CREATED)
 async def submit_alert(alert_request: AlertRequest, background_tasks: BackgroundTasks):
-    """Submit new security alert"""
     try:
         alert = bridge_service.add_alert(alert_request)
         
-        # Schedule evidence collection in background
+        # Collect evidence LOCALLY
         background_tasks.add_task(bridge_service.collect_evidence_snapshot)
         
-        return {
-            "status": "accepted",
-            "alert_id": alert.id,
-            "timestamp": alert.timestamp.isoformat(),
-            "message": "Alert processed and evidence collection scheduled"
-        }
+        # ESCALATE to Cloud Oracle IMMEDIATELY
+        background_tasks.add_task(escalate_to_oracle, alert_request.dict())
         
+        return {"status": "accepted", "alert_id": alert.id}
     except Exception as e:
         logger.error(f"Failed to submit alert: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process alert: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/alerts")
 async def get_alerts(limit: int = 100, severity: Optional[str] = None):

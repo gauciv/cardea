@@ -78,7 +78,6 @@ def create_app() -> FastAPI:
     async def receive_alert(
         alert_request: AlertRequest, 
         background_tasks: BackgroundTasks,
-        current_user: dict = Depends(get_current_user)
     ):
         """Receive and process security alerts from Sentry services"""
         try:

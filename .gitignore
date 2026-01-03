@@ -117,3 +117,5 @@ checkpoints/
 # Cloud provider specific
 .azure/
 .aws/
+
+.venv

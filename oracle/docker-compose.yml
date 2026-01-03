@@ -1,49 +1,43 @@
-# Oracle Backend Development Environment
-# Docker Compose configuration for Oracle cloud backend
+# Cardea Oracle Cloud Backend
+# Full Production-Ready MVP Configuration
 
 services:
-  # PostgreSQL Database
+  # 1. PostgreSQL - Persistent Threat Storage
   db:
     image: postgres:15-alpine
     container_name: cardea-oracle-db
     environment:
       POSTGRES_DB: cardea_oracle
       POSTGRES_USER: oracle
-      POSTGRES_PASSWORD: oracle_dev_password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-oracle_dev_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql  # Disabled for initial testing
     ports:
-      - "5433:5432"  # Different port to avoid conflicts
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oracle -d cardea_oracle"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 30s
     restart: unless-stopped
     networks:
       - oracle-network
 
-  # Redis Cache
+  # 2. Redis - AI Response Caching & Background Task Queue
   redis:
     image: redis:7-alpine
     container_name: cardea-oracle-redis
-    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     ports:
-      - "6381:6379"  # Different port to avoid conflicts
+      - "6381:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
+      interval: 10s
     networks:
       - oracle-network
 
-  # Oracle Backend Service
+  # 3. Oracle - Agentic AI Analytics Service
   oracle:
     build:
       context: .
@@ -52,40 +46,35 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://oracle:oracle_dev_password@db:5432/cardea_oracle
+      # CRITICAL: Using +asyncpg for FastAPI performance
+      - DATABASE_URL=postgresql+asyncpg://oracle:${DB_PASSWORD:-oracle_dev_password}@db:5432/cardea_oracle
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=dev_secret_key_change_in_production
       - LOG_LEVEL=INFO
-      - DEBUG=false
-      - SENTRY_WEBHOOK_TOKEN=dev_webhook_token
+      - DEBUG=true
+      # AZURE OPENAI CREDENTIALS
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT=gpt-4o
+      - AI_ENABLED=true
     volumes:
+      - ./src:/app/src:ro # Live reload during dev
       - ./data:/app/data
-      - ./config:/app/config
-      - ./logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
     networks:
       - oracle-network
-      - sentry_sentry-network  # Connect to Sentry network for communication
+      - sentry_sentry-network
+    restart: unless-stopped
 
-# Networks
 networks:
   oracle-network:
     driver: bridge
   sentry_sentry-network:
-    external: true  # Use existing Sentry network
+    external: true
 
-# Volumes
 volumes:
   postgres_data:
   redis_data:
