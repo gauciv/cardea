@@ -2,7 +2,6 @@
 # Full Production-Ready MVP Configuration - Portable & Automatic
 
 services:
-  # 1. PostgreSQL - Persistent Threat Storage
   db:
     image: postgres:15-alpine
     container_name: cardea-oracle-db
@@ -23,7 +22,6 @@ services:
     networks:
       - oracle-network
 
-  # 2. Redis - AI Response Caching & Background Task Queue
   redis:
     image: redis:7-alpine
     container_name: cardea-oracle-redis
@@ -37,7 +35,6 @@ services:
     networks:
       - oracle-network
 
-  # 3. Oracle - Agentic AI Analytics Service
   oracle:
     build:
       context: .
@@ -46,18 +43,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Using +asyncpg for FastAPI performance
       - DATABASE_URL=postgresql+asyncpg://oracle:${DB_PASSWORD:-oracle_dev_password}@db:5432/cardea_oracle
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
       - DEBUG=true
-      # AZURE OPENAI CREDENTIALS
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_DEPLOYMENT=gpt-4o
       - AI_ENABLED=true
     volumes:
-      - ./src:/app/src:ro # Live reload during dev
+      - ./src:/app/src:ro
       - ./data:/app/data
     depends_on:
       db:
@@ -66,20 +61,15 @@ services:
         condition: service_healthy
     networks:
       - oracle-network
-      - sentry_sentry-network
+      - sentry_shared_network
     restart: unless-stopped
 
 networks:
-  # Internal network for DB and Redis
   oracle-network:
     driver: bridge
-  
-  # External-facing network for Sentry communication
-  # FIX: Automatic creation and global naming
-  sentry_sentry-network:
-    name: sentry_sentry-network
-    driver: bridge
-    attachable: true
+  sentry_shared_network:
+    name: sentry_shared_network
+    external: true
 
 volumes:
   postgres_data:

@@ -2,7 +2,6 @@
 # Docker Compose configuration for local edge layer development
 
 services:
-  # Zeek - Passive network analysis and logging
   zeek:
     user: "root"
     cap_add:
@@ -24,7 +23,6 @@ services:
     depends_on:
       - bridge
 
-  # Suricata - Real-time Intrusion Detection System
   suricata:
     user: "root"
     cap_add:
@@ -45,7 +43,6 @@ services:
     depends_on:
       - bridge
 
-  # KitNET - AI-based anomaly detection
   kitnet:
     user: "root"
     build:
@@ -59,44 +56,37 @@ services:
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - KITNET_THRESHOLD=${KITNET_THRESHOLD:-0.95}
-      - BRIDGE_URL=http://bridge:8001
+      - BRIDGE_URL=http://cardea-bridge:8001
     networks:
       - sentry-network
     restart: unless-stopped
     depends_on:
       - bridge
 
-  # Bridge - Orchestration and alert escalation service
   bridge:
     build:
       context: ./bridge
       dockerfile: Dockerfile
     container_name: cardea-bridge
     ports:
-      - "8001:8001"  # Internal API
+      - "8001:8001"
     volumes:
       - ./data/bridge:/app/data
       - ./config/bridge:/app/config:ro
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://localhost:8000/api/alerts}
+      - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://cardea-oracle:8000/api/alerts}
       - SENTRY_ID=${SENTRY_ID:-sentry_001}
       - ALERT_THRESHOLD=${ALERT_THRESHOLD:-0.95}
     networks:
       - sentry-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # Redis - Local caching and session management
   redis:
     image: redis:7-alpine
     container_name: cardea-redis
     ports:
-      - "6380:6379"  # Avoid conflict with system Redis
+      - "6380:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -105,10 +95,8 @@ services:
 
 networks:
   sentry-network:
+    name: sentry_shared_network # Global name to prevent project prefixing
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
 
 volumes:
   redis_data:

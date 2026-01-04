@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CARDEA | SENTRY TACTICAL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;500;700&display=swap');
+        body { font-family: 'JetBrains Mono', monospace; background-color: #020617; }
+        .terminal-glow { box-shadow: 0 0 20px rgba(34, 197, 94, 0.1); }
+        .scanline {
+            width: 100%; height: 2px; z-index: 100; pointer-events: none;
+            background: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(34,197,94,0.05) 50%, rgba(255,255,255,0) 100%);
+            position: absolute; animation: scanline 8s linear infinite;
+        }
+        @keyframes scanline { 0% { top: 0%; } 100% { top: 100%; } }
+    </style>
+</head>
+<body class="text-green-500 p-4 md:p-8 min-h-screen relative overflow-hidden">
+    <div class="scanline"></div>
+    
+    <div class="max-w-6xl mx-auto space-y-6 relative z-10">
+        <header class="flex justify-between items-end border-b border-green-900 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tighter">SENTRY_NODE // X230-ARCH</h1>
+                <p class="text-[10px] text-green-800 font-bold uppercase">Location: Lapu-Lapu City, PH</p>
+            </div>
+            <div class="text-right">
+                <p class="text-xs font-bold" id="clock">00:00:00</p>
+                <p class="text-[9px] text-green-700">UPTIME: 04:12:44</p>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 border border-green-900 bg-black/40 p-6 terminal-glow relative">
+                <h2 class="text-xs font-bold mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    KITNET REAL-TIME ANOMALY SCORE
+                </h2>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-7xl font-light tracking-tighter" id="kitnet-score">0.0000</span>
+                    <span class="text-xs text-green-900 font-bold uppercase" id="threshold-status">Below Threshold</span>
+                </div>
+                <div class="mt-8 h-24 w-full border-t border-green-950 flex items-end gap-1" id="sparkline">
+                    </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="border border-green-900 bg-black/40 p-4">
+                    <h3 class="text-[10px] font-bold text-green-800 mb-2 uppercase">Interface Status</h3>
+                    <div class="flex justify-between text-sm">
+                        <span>Adapter:</span> <span class="text-white">wlan0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>Packet Rate:</span> <span class="text-white" id="pkt-rate">0 p/s</span>
+                    </div>
+                </div>
+
+                <div class="border border-green-900 bg-black/40 p-4">
+                    <h3 class="text-[10px] font-bold text-green-800 mb-2 uppercase">Oracle Link</h3>
+                    <div class="flex justify-between text-sm">
+                        <span>Endpoint:</span> <span class="text-white">Local-Cloud</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>Escalations:</span> <span class="text-white" id="escalation-count">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="border border-green-900 bg-black/80 p-4 h-64 overflow-y-auto text-[10px] font-mono leading-relaxed" id="logs">
+            <p class="text-green-800">[SYSTEM] Initializing Sentry Bridge v1.0.0...</p>
+            <p class="text-green-800">[NET] Binding to promiscuous mode on wlan0...</p>
+            <p class="text-green-800">[AI] KitNET Neural Engine Loaded.</p>
+        </div>
+    </div>
+
+    <script>
+        // Simple UI refresh logic
+        setInterval(() => {
+            const score = (Math.random() * 0.1).toFixed(4);
+            document.getElementById('kitnet-score').innerText = score;
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+            
+            // Log update
+            if(Math.random() > 0.8) {
+                const log = document.getElementById('logs');
+                const p = document.createElement('p');
+                p.innerText = `[TRAFFIC] Packet analyzed. Score: ${score}`;
+                log.appendChild(p);
+                log.scrollTop = log.scrollHeight;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
