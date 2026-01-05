@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     AZURE_OPENAI_DEPLOYMENT: str = "gpt-4o"
     AZURE_OPENAI_API_VERSION: str = "2024-08-01-preview"
     
+    # Azure AI Search Configuration (RAG for threat intelligence)
+    AZURE_SEARCH_ENDPOINT: Optional[str] = None
+    AZURE_SEARCH_KEY: Optional[str] = None
+    AZURE_SEARCH_INDEX_NAME: str = "threat-intelligence"
+    
     # AI Agent Configuration
     AI_ENABLED: bool = False # Disabled by default until keys are provided
     AI_MODEL_TEMPERATURE: float = 0.3

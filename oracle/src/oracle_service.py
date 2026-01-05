@@ -195,21 +195,32 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
             if not alert: return
             
             # --- AI BRAIN WITH TOKEN CAPS ---
+            threat_score = 0.4
+            ai_analysis = None
+            
             if settings.AZURE_OPENAI_API_KEY and settings.AI_ENABLED:
                 # Optimized call: max_tokens prevents bill shock from long GPT ramblings
-                threat_score = await threat_analyzer.calculate_threat_score(
-                    alert, 
-                    max_tokens=AI_MAX_RESPONSE_TOKENS,
-                    system_prompt="You are a SOC analyst. Be extremely concise. Use technical terms. Limit to 100 words."
-                )
-            else:
-                threat_score = 0.4
+                threat_score = await threat_analyzer.calculate_threat_score(alert)
                 
+                # Get AI analysis if available
+                if hasattr(alert, 'ai_analysis'):
+                    ai_analysis = alert.ai_analysis
+            
+            # Find correlations
             correlations = await correlator.find_correlations(alert)
+            
+            # Update alert
             alert.threat_score = threat_score
             alert.correlations = correlations
             alert.processed_at = datetime.now(timezone.utc)
             await db.flush()
+            
+            # Index threat for RAG (non-blocking, failures are logged but not critical)
+            try:
+                await threat_analyzer.index_threat_for_rag(alert, threat_score, ai_analysis)
+            except Exception as e:
+                logger.warning(f"Failed to index threat for RAG: {e}")
+            
     except Exception as e:
         logger.error(f"Background processing failed for alert {alert_id}: {e}")
 

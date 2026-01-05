@@ -7,9 +7,10 @@ The Oracle backend now features **AI-driven agentic reasoning** using Azure Open
 
 ### 🤖 Key Features
 1. **Intent Analysis**: AI identifies attack intent and Cyber Kill Chain stage
-2. **Human-Readable Recommendations**: Business-owner friendly explanations (What Happened, Why It Matters, What To Do)
-3. **Adaptive Thresholds**: AI recommends KitNET sensitivity adjustments based on threat patterns
-4. **Graceful Fallback**: Deterministic algorithms when AI unavailable
+2. **RAG-Enhanced Context**: Retrieves similar historical threats using Azure AI Search
+3. **Human-Readable Recommendations**: Business-owner friendly explanations (What Happened, Why It Matters, What To Do)
+4. **Adaptive Thresholds**: AI recommends KitNET sensitivity adjustments based on threat patterns
+5. **Graceful Fallback**: Deterministic algorithms when AI unavailable
 
 See [AI Analytics Documentation](../docs/agentic-ai-analytics.md) for full details.
 
@@ -17,35 +18,43 @@ See [AI Analytics Documentation](../docs/agentic-ai-analytics.md) for full detai
 The Oracle module provides cloud-based threat intelligence through:
 - **FastAPI**: RESTful API backend
 - **Azure OpenAI**: GPT-4o agentic reasoning engine
+- **Azure AI Search**: Vector-based semantic search for historical context (RAG)
 - **Advanced Analytics**: AI-powered threat scoring and correlation
 - **PostgreSQL**: Time-series alert storage
 
 ## Architecture
 ```
-Sentry Alerts → FastAPI → Azure AI → RAG → Dashboard
+Sentry Alerts → FastAPI → Azure AI → RAG (Azure Search) → Dashboard
                       ↓
                    Supabase
 ```
 
 ## Quick Start
 
-### 1. Configure Azure OpenAI
+### 1. Configure Azure OpenAI & Search
 ```bash
 # Copy environment template
 cp .env.example .env
 
-# Edit .env with your Azure OpenAI credentials
+# Edit .env with your Azure credentials
 # AZURE_OPENAI_API_KEY=your-key
 # AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-# AZURE_OPENAI_DEPLOYMENT=gpt-4o
+# AZURE_SEARCH_KEY=your-search-key
+# AZURE_SEARCH_ENDPOINT=https://your-search.search.windows.net
 ```
 
-### 2. Install Dependencies
+### 2. Initialize Search Index
+```bash
+# Create the Azure AI Search index schema
+python scripts/init_search_index.py
+```
+
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Start Oracle Service
+### 4. Start Oracle Service
 ```bash
 # Development mode
 python src/main.py
@@ -54,17 +63,21 @@ python src/main.py
 docker-compose up
 ```
 
-### 4. Test AI Features
+### 5. Test AI Features
 ```bash
 # Run AI analytics tests
 pytest tests/test_analytics_ai.py -v
+
+# Run Search integration tests
+pytest tests/test_search_service.py -v
 
 # Test health endpoint
 curl http://localhost:8000/health
 ```
 
 ## Components
-- `src/analytics.py` - **🤖 AI-powered threat analysis** (agentic reasoning)
+- `src/analytics.py` - **🤖 AI-powered threat analysis** (agentic reasoning + RAG)
+- `src/search_service.py` - **🔍 Azure AI Search integration**
 - `src/oracle_service.py` - FastAPI application and API routes
 - `src/database.py` - PostgreSQL models and connections
 - `src/models.py` - Pydantic request/response schemas
@@ -138,6 +151,9 @@ pytest tests/ -v
 
 # Run AI-specific tests
 pytest tests/test_analytics_ai.py -v
+
+# Run Search integration tests
+pytest tests/test_search_service.py -v
 
 # Run with coverage
 pytest --cov=src tests/

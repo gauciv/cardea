@@ -17,11 +17,12 @@ from openai.types.chat import ChatCompletion
 from models import AlertType, AlertSeverity, ThreatInfo
 from database import get_db, Alert, ThreatIntelligence
 from config import settings
+from search_service import ThreatIntelligenceSearch
 
 logger = logging.getLogger(__name__)
 
 class ThreatAnalyzer:
-    """Advanced threat analysis with AI-powered agentic reasoning"""
+    """Advanced threat analysis with AI-powered agentic reasoning and RAG"""
     
     def __init__(self):
         self.threat_patterns = self._load_threat_patterns()
@@ -55,6 +56,11 @@ class ThreatAnalyzer:
                 self.ai_client = None
         else:
             logger.info("ℹ️ AI-powered analysis disabled. Using deterministic algorithms.")
+        
+        # Initialize Azure AI Search for RAG
+        self.search_service = ThreatIntelligenceSearch()
+        if self.search_service.search_client:
+            logger.info("✅ Azure AI Search initialized for RAG-enhanced analysis")
     
     def _load_threat_patterns(self) -> Dict[str, Any]:
         """Load threat intelligence patterns"""
@@ -128,23 +134,39 @@ class ThreatAnalyzer:
             return 0.5  # Default moderate score
     
     async def _calculate_threat_score_ai(self, alert: Alert) -> float:
-        """AI-powered threat scoring with Cyber Kill Chain analysis"""
+        """AI-powered threat scoring with RAG-enhanced context"""
         try:
-            # Prepare context for AI analysis
+            # Query similar historical threats for context (RAG)
+            similar_threats = []
+            if self.search_service.search_client:
+                query = f"{alert.alert_type} {alert.title} {alert.description}"
+                similar_threats = await self.search_service.search_similar_threats(
+                    query=query,
+                    alert_type=alert.alert_type,
+                    top=3,
+                    min_score=0.6
+                )
+            
+            # Prepare context for AI analysis with RAG enhancement
             context = {
-                "alert_type": alert.alert_type,
-                "severity": alert.severity,
-                "source": alert.source,
-                "title": alert.title,
-                "description": alert.description,
-                "timestamp": alert.timestamp.isoformat(),
-                "network_context": alert.network_context or {},
-                "raw_data": alert.raw_data or {},
-                "indicators": alert.indicators or []
+                "current_alert": {
+                    "alert_type": alert.alert_type,
+                    "severity": alert.severity,
+                    "source": alert.source,
+                    "title": alert.title,
+                    "description": alert.description,
+                    "timestamp": alert.timestamp.isoformat(),
+                    "network_context": alert.network_context or {},
+                    "raw_data": alert.raw_data or {},
+                    "indicators": alert.indicators or []
+                },
+                "historical_context": similar_threats if similar_threats else "No similar historical threats found"
             }
             
-            # AI prompt for intent analysis
+            # Enhanced AI prompt with RAG context
             prompt = """Analyze this security alert and provide a threat assessment.
+
+**IMPORTANT**: Consider the historical context of similar past incidents when making your assessment.
 
 Your analysis should include:
 1. **Cyber Kill Chain Stage**: Identify which stage(s) this represents:
@@ -161,10 +183,13 @@ Your analysis should include:
    - Potential impact
    - Urgency of response needed
    - Evidence strength
+   - Pattern matching with historical incidents
 
 3. **Intent Analysis**: What is the attacker likely trying to accomplish?
 
 4. **Confidence**: How confident are you in this assessment (0.0-1.0)?
+
+5. **Historical Insights**: How does this compare to past incidents? (if historical context available)
 
 Respond in JSON format:
 {
@@ -200,9 +225,10 @@ Respond in JSON format:
                     final_score = threat_score * confidence
                     
                     logger.info(
-                        f"🤖 AI Threat Analysis for alert {alert.id}: "
+                        f"🤖 RAG-Enhanced AI Analysis for alert {alert.id}: "
                         f"Score={threat_score:.3f}, Confidence={confidence:.3f}, "
-                        f"Stage={ai_analysis.get('kill_chain_stage', 'unknown')}"
+                        f"Stage={ai_analysis.get('kill_chain_stage', 'unknown')}, "
+                        f"Historical Context: {len(similar_threats)} similar threats"
                     )
                     
                     # Store AI analysis in alert metadata (optional)
@@ -899,3 +925,53 @@ class AlertCorrelator:
             logger.warning(f"Behavioral correlation failed: {e}")
         
         return correlations
+    
+    async def index_threat_for_rag(self, alert: Alert, threat_score: float, ai_analysis: Optional[Dict] = None) -> bool:
+        """
+        Index analyzed threat into Azure Search for future RAG queries
+        
+        Args:
+            alert: The alert that was analyzed
+            threat_score: Calculated threat score
+            ai_analysis: Optional AI analysis results
+            
+        Returns:
+            True if successfully indexed, False otherwise
+        """
+        if not self.search_service.search_client:
+            logger.debug("Search service not available, skipping indexing")
+            return False
+        
+        try:
+            # Prepare threat document
+            threat_data = {
+                "threat_id": f"threat_{alert.id}_{int(alert.timestamp.timestamp())}",
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "title": alert.title,
+                "description": alert.description,
+                "resolution": "",  # To be filled in when threat is resolved
+                "indicators": alert.indicators or [],
+                "attack_patterns": [alert.alert_type],
+                "threat_score": threat_score,
+                "confidence_score": ai_analysis.get("confidence", 0.8) if ai_analysis else 0.7,
+                "first_seen": alert.timestamp,
+                "last_seen": alert.timestamp,
+                "kill_chain_stage": ai_analysis.get("kill_chain_stage", "Unknown") if ai_analysis else "Unknown",
+                "network_context": alert.network_context or {},
+                "occurrences": 1,
+            }
+            
+            # Index the threat
+            success = await self.search_service.index_threat(threat_data)
+            
+            if success:
+                logger.info(f"✅ Indexed threat {threat_data['threat_id']} for RAG")
+            else:
+                logger.warning(f"Failed to index threat {threat_data['threat_id']}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error indexing threat for RAG: {e}")
+            return False
