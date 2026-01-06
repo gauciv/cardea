@@ -54,6 +54,12 @@ Paste test output here
 ## 📊 Checklist
 <!-- Ensure your PR meets these requirements -->
 
+### 🤖 CI Checks
+<!-- These are automatically run. Make sure they pass before requesting review. -->
+- [ ] All CI checks pass (linting, type checking, build)
+- [ ] No new security vulnerabilities introduced (Trivy/CodeQL)
+- [ ] Docker images build successfully (if applicable)
+
 ### Code Quality
 - [ ] My code follows the project's style guidelines
 - [ ] I have performed a self-review of my code

@@ -1,0 +1,36 @@
+# CODEOWNERS - Define code ownership for review requirements
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+*                           @gauciv
+
+# Oracle Backend - Cloud Analytics
+/oracle/                    @gauciv
+/oracle/src/analytics.py    @gauciv
+/oracle/src/auth.py         @gauciv
+
+# Sentry Edge Layer - Security Critical
+/sentry/                    @gauciv
+/sentry/bridge/             @gauciv
+/sentry/services/           @gauciv
+
+# Dashboard Frontend
+/dashboard/                 @gauciv
+
+# Infrastructure - DevOps/Platform
+/infrastructure/            @gauciv
+/.github/workflows/         @gauciv
+
+# Shared Utilities
+/shared/                    @gauciv
+
+# Security-sensitive files require explicit review
+/.env*                      @gauciv
+/secrets/                   @gauciv
+**/auth*.py                 @gauciv
+**/security*.py             @gauciv
+
+# CI/CD and Config files
+/.github/                   @gauciv
+/pyproject.toml             @gauciv
+/.pre-commit-config.yaml    @gauciv
