@@ -61,7 +61,7 @@ services:
       - KITNET_INTERFACE=wlan0
       - KITNET_THRESHOLD=${KITNET_THRESHOLD:-0.95}
       # In host mode, we use localhost to reach the bridge's mapped port
-      - BRIDGE_URL=http://localhost:8001/alerts
+      - BRIDGE_URL=http://localhost:8001
     restart: unless-stopped
     depends_on:
       - bridge
@@ -78,6 +78,10 @@ services:
       - ./bridge:/app 
       - ./data/bridge:/app/data
       - ./config/bridge:/app/config:ro
+      # Zeek logs for notice.log monitoring and network discovery
+      - ./data/zeek:/opt/zeek/logs:ro
+      # Suricata logs for direct EVE access if needed
+      - ./data/suricata:/var/log/suricata:ro
     # FIX: Updated path and added --reload-dir to watch your new consumer HTML templates
     command: uvicorn src.bridge_service:app --host 0.0.0.0 --port 8001 --reload --reload-dir src/templates
     environment:
