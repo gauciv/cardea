@@ -3,24 +3,27 @@ Oracle Backend FastAPI Service - Optimized for Azure AI & Credit Protection
 Includes Redis-based De-duplication and Rate Limiting
 """
 
-import os
-import logging
 import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
+
 import redis.asyncio as redis
-
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select, func, text
+from sqlalchemy import func, select
 
+from analytics import AlertCorrelator, ThreatAnalyzer
 from config import settings
-from database import get_db, Alert
+from database import Alert, get_db
 from models import (
-    HealthResponse, AlertRequest, AlertResponse, 
-    ThreatAnalysisResponse, SystemStatus, AnalyticsResponse
+    AlertRequest,
+    AlertResponse,
+    AnalyticsResponse,
+    HealthResponse,
+    SystemStatus,
+    ThreatAnalysisResponse,
 )
-from analytics import ThreatAnalyzer, AlertCorrelator
 
 logger = logging.getLogger(__name__)
 

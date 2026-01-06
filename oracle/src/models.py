@@ -4,9 +4,10 @@ API request/response models and data validation
 """
 
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Any, Optional
+
+from pydantic import BaseModel, Field
 
 class AlertSeverity(str, Enum):
     LOW = "low"

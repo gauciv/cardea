@@ -3,19 +3,18 @@ Authentication and Authorization
 JWT-based authentication system with role-based access control
 """
 
-import os
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from fastapi import HTTPException, status, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-import secrets
+from typing import Optional
 
-from models import User, Token, TokenData
-from database import get_db
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
 from config import settings
+from database import get_db
+from models import Token, TokenData, User
 
 logger = logging.getLogger(__name__)
 

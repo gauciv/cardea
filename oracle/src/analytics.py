@@ -3,20 +3,19 @@ Analytics and Threat Processing
 Advanced threat analysis with AI-powered agentic reasoning
 """
 
-import asyncio
-import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional, Tuple
-import numpy as np
-from collections import defaultdict, Counter
 import json
+import logging
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
+import numpy as np
 from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
 
-from models import AlertType, AlertSeverity, ThreatInfo
-from database import get_db, Alert, ThreatIntelligence
 from config import settings
+from database import Alert, ThreatIntelligence, get_db
+from models import AlertSeverity, AlertType, ThreatInfo
 from search_service import ThreatIntelligenceSearch
 
 logger = logging.getLogger(__name__)

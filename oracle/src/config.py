@@ -4,10 +4,10 @@ Updated for Pydantic v2 and environment-based configuration
 Supports both development and production environments via DEPLOYMENT_ENVIRONMENT
 """
 
-import os
-from typing import Optional, Literal
+from typing import Literal, Optional
+
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator, computed_field
 
 class Settings(BaseSettings):
     """

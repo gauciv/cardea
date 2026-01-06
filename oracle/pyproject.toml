@@ -1,0 +1,58 @@
+[project]
+name = "cardea-oracle"
+version = "1.0.0"
+description = "Cardea Oracle - Cloud Security Analytics Backend"
+requires-python = ">=3.11"
+
+[tool.ruff]
+# Target Python 3.11
+target-version = "py311"
+line-length = 120
+
+# Exclude paths
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "migrations",
+    ".mypy_cache",
+]
+
+[tool.ruff.lint]
+# Enable these rule sets
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function calls in argument defaults
+    "B905",   # zip() without explicit strict= 
+    "SIM108", # Use ternary instead of if-else
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "database", "models", "analytics", "auth", "oracle_service", "search_service"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+strict = false
+warn_unused_ignores = true

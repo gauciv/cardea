@@ -3,28 +3,28 @@ Azure AI Search Integration for Threat Intelligence RAG
 Provides semantic search over historical threat data
 """
 
+import json
 import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
-import json
+from typing import Any, Optional
 
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import ResourceNotFoundError
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
-    SearchIndex,
-    SimpleField,
+    HnswAlgorithmConfiguration,
     SearchableField,
     SearchField,
     SearchFieldDataType,
+    SearchIndex,
+    SimpleField,
     VectorSearch,
-    HnswAlgorithmConfiguration,
     VectorSearchProfile,
 )
-from azure.core.credentials import AzureKeyCredential
-from azure.core.exceptions import ResourceNotFoundError
 
 from config import settings
-from models import AlertType, AlertSeverity
+from models import AlertSeverity, AlertType
 
 logger = logging.getLogger(__name__)
 
