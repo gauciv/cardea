@@ -6,11 +6,11 @@ Includes Redis-based De-duplication and Rate Limiting
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 import redis.asyncio as redis
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
@@ -61,7 +61,9 @@ async def check_abuse_safeguards(alert: AlertRequest) -> bool:
     current_minute_count = results[1]
 
     if is_duplicate:
-        logger.warning(f"🚫 Dropping duplicate alert from {alert.source}")
+        # Sanitize source to prevent log injection
+        safe_source = str(alert.source)[:50].replace('\n', ' ').replace('\r', ' ')
+        logger.warning(f"🚫 Dropping duplicate alert from {safe_source}")
         return True
 
     if current_minute_count > GLOBAL_MINUTE_LIMIT:

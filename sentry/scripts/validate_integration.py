@@ -8,8 +8,6 @@ Run with: python scripts/validate_integration.py
 
 import asyncio
 import aiohttp
-import json
-import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Any

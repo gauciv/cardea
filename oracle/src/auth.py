@@ -14,7 +14,7 @@ from passlib.context import CryptContext
 
 from config import settings
 from database import get_db
-from models import Token, TokenData, User
+from models import TokenData, User
 
 logger = logging.getLogger(__name__)
 

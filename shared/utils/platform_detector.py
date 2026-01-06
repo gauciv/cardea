@@ -358,7 +358,7 @@ class PlatformDetector:
             if result.returncode == 0 and "cap_net_raw" in result.stdout.lower():
                 return True
                 
-        except Exception:
+        except OSError:  # Capability check is best-effort
             pass
         
         return False

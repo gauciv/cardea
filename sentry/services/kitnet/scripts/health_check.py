@@ -5,7 +5,6 @@ Checks KitNET's internal state, model status, and processing health
 """
 
 import sys
-import os
 import json
 from pathlib import Path
 
@@ -94,7 +93,7 @@ def check_memory():
             "max_memory_mb": max_mem_mb,
             "healthy": healthy
         }
-    except Exception:
+    except OSError:  # Memory check fails gracefully
         return {"memory_check": "unavailable", "healthy": True}
 
 def main():

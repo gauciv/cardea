@@ -4,11 +4,9 @@ Alert Manager for KitNET
 Manages alert sending to Bridge service with robust type handling
 """
 
-import asyncio
 import logging
 import aiohttp
 from typing import Any, Union
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

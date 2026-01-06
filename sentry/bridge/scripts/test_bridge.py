@@ -6,7 +6,6 @@ Validates all Bridge components are working correctly
 
 import asyncio
 import aiohttp
-import json
 import logging
 from datetime import datetime
 

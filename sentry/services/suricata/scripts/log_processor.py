@@ -15,7 +15,7 @@ import time
 import os
 import requests
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from datetime import datetime
 import logging
 from collections import deque

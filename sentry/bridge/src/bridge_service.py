@@ -10,12 +10,10 @@ Now includes:
 """
 
 import asyncio
-import json
 import logging
-import sys
 import os
 import httpx
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Any
 from dataclasses import dataclass, asdict
@@ -53,7 +51,8 @@ class EnhancedPlatformDetector:
                     if "docker" in f.read():
                         container_info["is_container"] = True
                         container_info["type"] = "docker"
-        except Exception: pass
+        except OSError:  # Container detection is best-effort
+            pass
         return container_info
 
     def _detect_os(self):
@@ -65,7 +64,8 @@ class EnhancedPlatformDetector:
                     with open("/etc/os-release", "r") as f:
                         for line in f:
                             if line.startswith("NAME="): os_info["distribution"] = line.split("=")[1].strip().strip('"')
-            except Exception: pass
+            except OSError:  # OS detection is best-effort
+                pass
         return os_info
 
     def _detect_network_interfaces(self):
@@ -86,7 +86,8 @@ class EnhancedPlatformDetector:
             import subprocess
             if subprocess.run(["docker", "--version"], capture_output=True).returncode == 0:
                 capabilities["available"] = True
-        except Exception: pass
+        except (OSError, FileNotFoundError):  # Docker detection is best-effort
+            pass
         return capabilities
 
     def get_os_info(self): return {"name": self.os_info.get("distribution", "unknown")}

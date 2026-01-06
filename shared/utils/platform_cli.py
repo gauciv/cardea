@@ -5,7 +5,6 @@ Command-line interface for platform detection and configuration
 """
 
 import sys
-import os
 from pathlib import Path
 
 # Add utils to path

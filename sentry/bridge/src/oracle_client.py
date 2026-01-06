@@ -7,9 +7,8 @@ Handles communication with Oracle cloud service
 import asyncio
 import logging
 import aiohttp
-from typing import Dict, Any, List
+from typing import Any
 from datetime import datetime
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

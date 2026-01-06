@@ -6,8 +6,6 @@ Tests if the application can actually run independently
 
 import sys
 import os
-import subprocess
-import json
 from pathlib import Path
 
 def test_platform_detection():
@@ -113,7 +111,7 @@ def test_bridge_service():
         from bridge_service import BridgeService
         
         # Try to create instance (don't start it)
-        bridge = BridgeService()
+        _bridge = BridgeService()  # Prefixed with _ to indicate intentionally unused
         print("  ✅ Bridge service can be instantiated")
         return True
         
@@ -130,7 +128,7 @@ def test_kitnet_service():
         from network_monitor import NetworkMonitor
         
         # NetworkMonitor takes no arguments in __init__
-        monitor = NetworkMonitor()
+        _monitor = NetworkMonitor()  # Prefixed with _ to indicate intentionally unused
         print("  ✅ KitNET NetworkMonitor can be instantiated")
         return True
         

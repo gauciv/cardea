@@ -8,7 +8,6 @@ import os
 import logging
 from typing import Any
 from pathlib import Path
-import yaml
 
 from platform_detector import platform_detector
 
@@ -217,7 +216,7 @@ class EnvironmentConfigurator:
                         "kitnet": "512m",
                         "bridge": "128m"
                     }
-            except (ValueError, IndexError):
+            except (ValueError, IndexError):  # Fall back to defaults if parsing fails
                 pass
         
         return limits

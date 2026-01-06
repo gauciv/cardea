@@ -7,9 +7,8 @@ Processes and manages alerts from Sentry services
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Optional
-import json
+from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

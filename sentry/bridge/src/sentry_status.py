@@ -6,7 +6,7 @@ Monitors and reports status of all Sentry services
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 import aiohttp
 
