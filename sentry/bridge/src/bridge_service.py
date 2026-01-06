@@ -486,6 +486,42 @@ async def get_suricata_stats():
         "last_check": datetime.now().isoformat()
     }
 
+# --- KITNET STATS ENDPOINT ---
+
+# KitNET statistics storage
+kitnet_stats = {
+    "last_report": None,
+    "phase": "unknown",
+    "training_progress": 0.0,
+    "total_processed": 0,
+    "anomalies_detected": 0,
+    "uptime_seconds": 0,
+    "num_autoencoders": 0,
+    "feature_groups": 0,
+    "adaptive_threshold": 0.95,
+}
+
+@app.post("/api/kitnet-stats")
+async def receive_kitnet_stats(data: dict):
+    """Receives periodic stats from KitNET service"""
+    global kitnet_stats
+    kitnet_stats.update(data)
+    kitnet_stats["last_report"] = datetime.now().isoformat()
+    logger.debug(f"🤖 KitNET stats updated: {data.get('total_processed', 0)} processed")
+    return {"status": "ok"}
+
+@app.get("/api/kitnet-stats")
+async def get_kitnet_stats():
+    """Returns KitNET AI detection statistics"""
+    return {
+        **kitnet_stats,
+        "detection_rate": (
+            kitnet_stats["anomalies_detected"] / kitnet_stats["total_processed"]
+            if kitnet_stats["total_processed"] > 0 else 0
+        ),
+        "status": "training" if kitnet_stats["phase"] != "DETECT" else "active",
+    }
+
 @app.get("/api/discovery")
 async def discovery_endpoint():
     """Provides dynamic data for the React NetworkMap"""
