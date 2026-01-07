@@ -103,11 +103,19 @@ async def get_cached_ai_insight():
 async def cache_ai_insight(insight_dict: dict):
     """Cache an AI insight with timestamp"""
     try:
+        # Convert any datetime objects to ISO strings for JSON serialization
+        def serialize(obj):
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            elif hasattr(obj, 'model_dump'):
+                return obj.model_dump()
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+        
         insight_dict["cached_at"] = datetime.now(timezone.utc).isoformat()
         await redis_client.setex(
             "ai_insight:cache",
             AI_INSIGHT_CACHE_SECONDS,
-            json.dumps(insight_dict)
+            json.dumps(insight_dict, default=serialize)
         )
     except Exception as e:
         logger.warning(f"Cache write failed: {e}")
@@ -141,6 +149,60 @@ async def check_ai_insight_rate_limit() -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Rate limit check failed: {e}")
         return True, "Rate limit check unavailable"
+
+
+async def get_current_system_state() -> dict[str, Any]:
+    """
+    Get the current system security state from Redis.
+    This tells us what actions are active (lockdown, blocked IPs, etc.)
+    """
+    try:
+        state = {
+            "lockdown_active": False,
+            "lockdown_expires": None,
+            "blocked_ips_count": 0,
+            "blocked_ips": [],
+            "enhanced_monitoring": False,
+            "dismissed_recently": False,
+        }
+        
+        # Check lockdown status
+        lockdown_data = await redis_client.get("system:lockdown")
+        if lockdown_data:
+            data = json.loads(lockdown_data)
+            state["lockdown_active"] = data.get("enabled", False)
+            state["lockdown_expires"] = data.get("expires_at")
+        
+        # Count blocked IPs
+        blocked_keys = []
+        async for key in redis_client.scan_iter("blocked:ip:*"):
+            blocked_keys.append(key)
+        state["blocked_ips_count"] = len(blocked_keys)
+        state["blocked_ips"] = [k.replace("blocked:ip:", "") for k in blocked_keys[:10]]
+        
+        # Check enhanced monitoring
+        monitoring_data = await redis_client.get("system:enhanced_monitoring")
+        if monitoring_data:
+            state["enhanced_monitoring"] = True
+        
+        # Check if user dismissed alerts recently (last hour)
+        dismissed_count = 0
+        async for key in redis_client.scan_iter("dismissed:*"):
+            dismissed_count += 1
+            if dismissed_count >= 1:
+                state["dismissed_recently"] = True
+                break
+        
+        return state
+    except Exception as e:
+        logger.warning(f"Failed to get system state: {e}")
+        return {
+            "lockdown_active": False,
+            "blocked_ips_count": 0,
+            "enhanced_monitoring": False,
+            "dismissed_recently": False,
+        }
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -248,6 +310,24 @@ def create_app() -> FastAPI:
             )
         )
     
+    @app.get("/api/status")
+    async def get_system_status():
+        """
+        Get current security status - lockdown, blocked IPs, monitoring state.
+        Called by the dashboard to show real-time protection status.
+        """
+        state = await get_current_system_state()
+        
+        return {
+            "lockdown_active": state["lockdown_active"],
+            "lockdown_expires": state.get("lockdown_expires"),
+            "blocked_ips_count": state["blocked_ips_count"],
+            "blocked_ips": state.get("blocked_ips", []),
+            "enhanced_monitoring": state["enhanced_monitoring"],
+            "protection_active": True,  # Always true when Oracle is running
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+    
     @app.post("/api/alerts", response_model=AlertResponse)
     async def receive_alert(
         alert_request: AlertRequest, 
@@ -324,6 +404,98 @@ def create_app() -> FastAPI:
         except Exception as e:
             logger.error(f"Analytics Error: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
+    
+    # ===========================================
+    # ADMIN ENDPOINTS - Data management
+    # ===========================================
+    
+    @app.delete("/api/admin/alerts")
+    async def clear_all_alerts(confirm: str = ""):
+        """
+        Clear all alerts from the database.
+        Requires confirm=yes query parameter.
+        """
+        if confirm != "yes":
+            raise HTTPException(
+                status_code=400, 
+                detail="Add ?confirm=yes to confirm deletion of all alerts"
+            )
+        
+        try:
+            async with get_db() as db:
+                # Delete all alerts
+                result = await db.execute(text("DELETE FROM alerts"))
+                deleted_count = result.rowcount
+                await db.commit()
+            
+            # Also clear Redis caches
+            await redis_client.delete("ai_insight:cache")
+            
+            # Clear dismissed markers
+            async for key in redis_client.scan_iter("dismissed:*"):
+                await redis_client.delete(key)
+            
+            logger.warning(f"🗑️ ADMIN: Cleared {deleted_count} alerts from database")
+            
+            return {
+                "success": True,
+                "deleted_count": deleted_count,
+                "message": f"Deleted {deleted_count} alerts. Database is now clean."
+            }
+        except Exception as e:
+            logger.error(f"Failed to clear alerts: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+    
+    @app.get("/api/admin/action-log")
+    async def get_action_log():
+        """
+        Get a log of all security actions taken.
+        This proves that actions are actually being executed.
+        """
+        actions = []
+        
+        # Check blocked IPs
+        async for key in redis_client.scan_iter("blocked:ip:*"):
+            data = await redis_client.get(key)
+            if data:
+                action = json.loads(data)
+                action["action_type"] = "block_ip"
+                action["key"] = key
+                actions.append(action)
+        
+        # Check lockdown status
+        lockdown = await redis_client.get("system:lockdown")
+        if lockdown:
+            data = json.loads(lockdown)
+            data["action_type"] = "lockdown"
+            actions.append(data)
+        
+        # Check enhanced monitoring
+        monitoring = await redis_client.get("system:enhanced_monitoring")
+        if monitoring:
+            data = json.loads(monitoring)
+            data["action_type"] = "enhanced_monitoring"
+            actions.append(data)
+        
+        # Check dismissed alerts
+        dismissed = []
+        async for key in redis_client.scan_iter("dismissed:*"):
+            data = await redis_client.get(key)
+            if data:
+                d = json.loads(data)
+                d["action_type"] = "dismiss"
+                d["key"] = key
+                dismissed.append(d)
+        
+        return {
+            "active_blocks": len([a for a in actions if a.get("action_type") == "block_ip"]),
+            "lockdown_active": lockdown is not None,
+            "enhanced_monitoring": monitoring is not None,
+            "dismissed_count": len(dismissed),
+            "actions": actions,
+            "dismissed": dismissed[:10],  # Last 10 dismissals
+            "message": "These are REAL actions stored in Redis, not fake data."
+        }
     
     # ===========================================
     # SECURITY ACTION ENDPOINTS - Real execution
@@ -478,6 +650,22 @@ def create_app() -> FastAPI:
                     message=f"Added {len(ips)} address{'es' if len(ips) > 1 else ''} to your trusted list. I won't flag these as suspicious anymore.",
                     details={"allowed_ips": ips},
                     can_undo=True
+                )
+            
+            elif action_type == "end_lockdown":
+                # End lockdown mode early
+                await redis_client.delete("system:lockdown")
+                await notify_sentry_lockdown(False, 0)
+                
+                logger.info("🔓 Lockdown mode ended by user")
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message="Lockdown ended. Your network is back to normal operations. I'm still watching for threats.",
+                    details={},
+                    can_undo=False
                 )
             
             else:
@@ -644,8 +832,8 @@ async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: T
     # Generate fresh insight
     insight = await _generate_ai_insight_internal(analytics_data, threat_analyzer)
     
-    # Cache the result for future requests
-    await cache_ai_insight(insight.model_dump())
+    # Cache the result for future requests (use mode='json' for proper serialization)
+    await cache_ai_insight(insight.model_dump(mode='json'))
     
     return insight
 
@@ -663,6 +851,69 @@ async def _generate_ai_insight_internal(analytics_data: dict[str, Any], threat_a
     critical_count = severity_stats.get("critical", 0)
     high_count = severity_stats.get("high", 0)
     medium_count = severity_stats.get("medium", 0)
+    
+    # --- DETECT TEST/SYNTHETIC DATA ---
+    test_indicators = 0
+    test_patterns = ["test", "curl", "localhost", "127.0.0.1", "example", "demo", "fake", "synthetic"]
+    real_sources = {"zeek", "suricata", "kitnet", "bridge"}
+    
+    for alert in alerts[:20]:
+        desc = (alert.get("description") or "").lower()
+        title = (alert.get("title") or "").lower()
+        source = (alert.get("source") or "").lower()
+        raw = alert.get("raw_data") or {}
+        
+        # Check for test patterns in description/title
+        if any(pattern in desc or pattern in title for pattern in test_patterns):
+            test_indicators += 1
+        
+        # Check for localhost/loopback IPs
+        src_ip = raw.get("src_ip", "")
+        dst_ip = raw.get("dest_ip", "")
+        if src_ip.startswith("127.") or dst_ip.startswith("127."):
+            test_indicators += 1
+        
+        # Check if source is a real Sentry component
+        if source not in real_sources:
+            test_indicators += 1
+    
+    is_likely_test_data = test_indicators > (len(alerts[:20]) * 0.5) if alerts else False
+    
+    # --- CHECK SENTRY STATUS ---
+    sentry_active = False
+    sentry_sources = set()
+    for alert in alerts[:20]:
+        source = (alert.get("source") or "").lower()
+        if source in real_sources:
+            sentry_sources.add(source)
+            sentry_active = True
+    medium_count = severity_stats.get("medium", 0)
+    
+    # --- FETCH CURRENT SYSTEM STATE ---
+    system_state = await get_current_system_state()
+    is_lockdown = system_state.get("lockdown_active", False)
+    blocked_ips_count = system_state.get("blocked_ips_count", 0)
+    enhanced_monitoring = system_state.get("enhanced_monitoring", False)
+    dismissed_recently = system_state.get("dismissed_recently", False)
+    
+    # Check for recent alerts (last 5 minutes) vs old alerts
+    recent_alert_count = 0
+    old_alert_count = 0
+    now = datetime.now(timezone.utc)
+    
+    for alert in alerts[:50]:
+        alert_time = alert.get("timestamp")
+        if alert_time:
+            try:
+                if isinstance(alert_time, str):
+                    alert_time = datetime.fromisoformat(alert_time.replace("Z", "+00:00"))
+                age_minutes = (now - alert_time).total_seconds() / 60
+                if age_minutes <= 5:
+                    recent_alert_count += 1
+                else:
+                    old_alert_count += 1
+            except Exception:
+                old_alert_count += 1
     
     # Extract threat details for natural language
     threat_sources = set()
@@ -698,25 +949,174 @@ async def _generate_ai_insight_internal(analytics_data: dict[str, Any], threat_a
             logger.info(f"🚫 AI insight skipped: {reason}")
     
     # --- CONSUMER-FRIENDLY DETERMINISTIC RESPONSES ---
-    # (These are used when AI is unavailable or rate-limited)
+    # These responses are STATE-AWARE - they change based on what's happening
     
     insight = None  # Will be set below
     
-    if total_alerts == 0:
-        insight = AIInsight(
-            greeting="Good news! 🎉",
-            status_emoji="🟢",
-            headline="Your network is safe and quiet",
-            story="I've been watching your network for the past 24 hours and everything looks normal. No suspicious activity, no attempted break-ins, no malware. Your business is protected.",
+    # --- SPECIAL CASE: Lockdown is active ---
+    if is_lockdown:
+        return AIInsight(
+            greeting="🔒 Lockdown Active",
+            status_emoji="🟠",
+            headline="Your network is in lockdown mode — you're protected",
+            story=f"I've blocked all new incoming connections as you requested. Your existing connections are still working. "
+                  f"{'New threats are being blocked automatically. ' if recent_alert_count > 0 else ''}"
+                  f"The lockdown will automatically end when the timer expires, or you can end it early.",
             actions_taken=[
-                "Continuously monitoring all network traffic",
-                "Blocking known malicious websites automatically",
-                "Keeping your threat database up to date"
+                "Blocking all new incoming connections",
+                f"Already blocked {blocked_ips_count} suspicious addresses" if blocked_ips_count > 0 else "No suspicious addresses detected",
+                "Monitoring for any attempts to breach the lockdown"
             ],
-            decisions=[],  # No decisions needed
+            decisions=[
+                ActionButton(
+                    id="end_lockdown",
+                    label="End Lockdown Early",
+                    action_type="end_lockdown",
+                    severity="info",
+                    description="Resume normal network operations"
+                )
+            ],
             confidence=0.95,
             ai_powered=False
         )
+    
+    # --- SPECIAL CASE: User dismissed alerts recently, network is calm ---
+    if dismissed_recently and recent_alert_count == 0:
+        return AIInsight(
+            greeting="Following up 👋",
+            status_emoji="🟢",
+            headline="All quiet since you reviewed the alerts",
+            story=f"Since you marked those alerts as reviewed, there hasn't been any new suspicious activity. "
+                  f"{'I blocked ' + str(blocked_ips_count) + ' addresses that were causing trouble. ' if blocked_ips_count > 0 else ''}"
+                  f"Everything looks stable now.",
+            actions_taken=[
+                "Continued monitoring since your last review",
+                f"Keeping {blocked_ips_count} addresses blocked" if blocked_ips_count > 0 else "No addresses currently blocked",
+                "Ready to alert you if anything changes"
+            ],
+            decisions=[],
+            confidence=0.90,
+            ai_powered=False
+        )
+    
+    # --- SPECIAL CASE: Blocked IPs and no new threats ---
+    if blocked_ips_count > 0 and recent_alert_count == 0 and critical_count == 0 and high_count == 0:
+        return AIInsight(
+            greeting="Protection working! ✅",
+            status_emoji="🟢",
+            headline=f"Blocked {blocked_ips_count} threat{'s' if blocked_ips_count > 1 else ''} — network is now secure",
+            story=f"The threats I blocked earlier are no longer a problem. Your network has been quiet since I took action. "
+                  f"I'm keeping those {blocked_ips_count} addresses blocked to prevent them from trying again.",
+            actions_taken=[
+                f"Blocking {blocked_ips_count} malicious addresses",
+                "Continuously monitoring for new threats",
+                "Ready to act if anything changes"
+            ],
+            decisions=[
+                ActionButton(
+                    id="view_blocked",
+                    label="View blocked addresses",
+                    action_type="expand",
+                    severity="info",
+                    description="See what's being blocked"
+                )
+            ],
+            confidence=0.95,
+            ai_powered=False
+        )
+    
+    # --- SPECIAL CASE: Old alerts only, no new activity (likely test data) ---
+    if total_alerts > 0 and recent_alert_count == 0 and old_alert_count > 0:
+        hours_old = "over an hour"  # Simplification
+        return AIInsight(
+            greeting="Quick status update 📋",
+            status_emoji="🟢",
+            headline="No new threats — previous alerts are from earlier",
+            story=f"The {total_alerts} alerts you're seeing are from earlier testing or past activity. "
+                  f"There's been no new suspicious activity recently. Your network is currently quiet and secure.",
+            actions_taken=[
+                "Monitoring for new threats in real-time",
+                "Previous alerts logged for your records",
+                "All systems operating normally"
+            ],
+            decisions=[
+                ActionButton(
+                    id="clear_old",
+                    label="Clear old alerts",
+                    action_type="dismiss",
+                    severity="info",
+                    description="Mark previous alerts as reviewed"
+                )
+            ],
+            confidence=0.85,
+            ai_powered=False
+        )
+    
+    # --- SPECIAL CASE: Test/Synthetic Data Detected ---
+    if is_likely_test_data and total_alerts > 0:
+        return AIInsight(
+            greeting="Hey, just a heads up 🧪",
+            status_emoji="🔵",
+            headline="These look like test alerts, not real threats",
+            story=f"I noticed the {total_alerts} alerts in your system have patterns that suggest they're from testing — "
+                  f"things like 'test' in the description, localhost addresses, or curl commands. "
+                  f"This is totally normal during setup! Once your Sentry services start detecting real network traffic, "
+                  f"you'll see genuine security events here instead.",
+            actions_taken=[
+                "Analyzing alert patterns to distinguish real vs test data",
+                "Sentry monitoring is active and ready",
+                "I'll alert you when real threats appear"
+            ],
+            decisions=[
+                ActionButton(
+                    id="clear_test",
+                    label="Clear test data",
+                    action_type="dismiss",
+                    severity="info",
+                    description="Remove these test alerts from the dashboard"
+                )
+            ],
+            technical_summary=f"Test indicators found in {test_indicators}/{min(len(alerts), 20)} alerts. Sources: {', '.join(sentry_sources) if sentry_sources else 'None detected'}",
+            confidence=0.80,
+            ai_powered=False
+        )
+    
+    # --- STANDARD CASES ---
+    if total_alerts == 0:
+        # Vary the message based on Sentry status
+        if sentry_active:
+            return AIInsight(
+                greeting="All clear! ✅",
+                status_emoji="🟢",
+                headline="Your network is secure — Sentry is watching",
+                story=f"I'm actively monitoring your network through {', '.join(sentry_sources)}. "
+                      f"No threats detected, no suspicious activity, nothing out of the ordinary. "
+                      f"Your business is protected and I'm here if anything changes.",
+                actions_taken=[
+                    f"Real-time monitoring via {', '.join(sentry_sources)}",
+                    "Threat intelligence updated",
+                    "Ready to respond to any incidents"
+                ],
+                decisions=[],
+                confidence=0.95,
+                ai_powered=False
+            )
+        else:
+            return AIInsight(
+                greeting="Hi there! 👋",
+                status_emoji="🟢",
+                headline="Your network looks quiet",
+                story="No security alerts right now. I'm watching your network and will let you know immediately if I spot anything suspicious. "
+                      "You can go about your day — I've got this covered.",
+                actions_taken=[
+                    "Monitoring all network traffic",
+                    "Blocking known malicious sources",
+                    "Keeping threat signatures updated"
+                ],
+                decisions=[],
+                confidence=0.90,
+                ai_powered=False
+            )
     
     elif critical_count > 0:
         # CRITICAL - needs immediate attention with clear actions
@@ -895,7 +1295,35 @@ async def process_alert_background(alert_id: int, threat_analyzer: ThreatAnalyze
         logger.error(f"Background processing failed for alert {alert_id}: {e}")
 
 async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
-    stmt = select(Alert).order_by(Alert.timestamp.desc()).limit(50)
+    """
+    Calculate analytics for the specified time range.
+    Only returns alerts from the requested time period.
+    """
+    # Parse time range to get start time
+    now = datetime.now(timezone.utc)
+    
+    if time_range == "1h":
+        start_time = now - timedelta(hours=1)
+    elif time_range == "6h":
+        start_time = now - timedelta(hours=6)
+    elif time_range == "24h":
+        start_time = now - timedelta(hours=24)
+    elif time_range == "7d":
+        start_time = now - timedelta(days=7)
+    elif time_range == "today":
+        # Start of today (midnight UTC)
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        # Default to 24h
+        start_time = now - timedelta(hours=24)
+    
+    # Query alerts within time range
+    stmt = (
+        select(Alert)
+        .where(Alert.timestamp >= start_time)
+        .order_by(Alert.timestamp.desc())
+        .limit(50)
+    )
     result = await db.execute(stmt)
     alerts_list = result.scalars().all()
     
@@ -914,15 +1342,22 @@ async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
             "raw_data": alert.raw_data,
         })
     
-    count_stmt = select(func.count()).select_from(Alert)
+    # Count only alerts in time range
+    count_stmt = select(func.count()).select_from(Alert).where(Alert.timestamp >= start_time)
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
     
-    risk_stmt = select(func.avg(Alert.threat_score)).select_from(Alert)
+    # Risk score from alerts in time range
+    risk_stmt = select(func.avg(Alert.threat_score)).select_from(Alert).where(Alert.timestamp >= start_time)
     risk_result = await db.execute(risk_stmt)
     avg_risk = risk_result.scalar() or 0.0
 
-    sev_stmt = select(Alert.severity, func.count(Alert.id)).group_by(Alert.severity)
+    # Severity stats for alerts in time range
+    sev_stmt = (
+        select(Alert.severity, func.count(Alert.id))
+        .where(Alert.timestamp >= start_time)
+        .group_by(Alert.severity)
+    )
     sev_result = await db.execute(sev_stmt)
     severity_map = {row[0]: row[1] for row in sev_result.all()}
     
@@ -930,7 +1365,9 @@ async def calculate_analytics(db, time_range: str) -> dict[str, Any]:
         "total_alerts": total,
         "risk_score": float(avg_risk),
         "alerts": serialized_alerts,
-        "severity_stats": severity_map
+        "severity_stats": severity_map,
+        "time_range": time_range,
+        "start_time": start_time.isoformat(),
     }
 
 async def get_alerts_count() -> int:

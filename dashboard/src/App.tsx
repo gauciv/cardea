@@ -273,7 +273,8 @@ const App: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics`, {
+      // Use 'today' time range to only show today's events
+      const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics?time_range=today`, {
         timeout: 10000, // 10 second timeout
       });
       setData(res.data);
@@ -503,7 +504,7 @@ const App: React.FC = () => {
                 <div className="bg-slate-900/40 border border-slate-900 p-6 rounded-xl flex-1 flex flex-col justify-center">
                   <div className="flex items-center gap-2 text-slate-500 mb-2">
                     <Activity className="w-3 h-3 text-purple-500" />
-                    <p className="text-[10px] font-bold uppercase tracking-wider">Telemetry Events</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider">Events Today</p>
                   </div>
                   {isConnected && data ? (
                     <>
@@ -535,7 +536,7 @@ const App: React.FC = () => {
               <div className="px-6 py-4 border-b border-slate-900 bg-slate-900/40 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Server className="w-4 h-4 text-slate-500" />
-                    <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Live Anomaly Feed</h2>
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Today's Security Events</h2>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">

@@ -35,6 +35,11 @@ class ThreatIntelligenceSearch:
         self.search_client = None
         self.index_client = None
         
+        # Debug: Log what credentials we have
+        has_key = bool(settings.AZURE_SEARCH_KEY)
+        has_endpoint = bool(settings.AZURE_SEARCH_ENDPOINT)
+        logger.info(f"🔍 Azure Search config: endpoint={'✓' if has_endpoint else '✗'}, key={'✓' if has_key else '✗'}")
+        
         if settings.AZURE_SEARCH_KEY and settings.AZURE_SEARCH_ENDPOINT:
             try:
                 credential = AzureKeyCredential(settings.AZURE_SEARCH_KEY)
@@ -52,13 +57,13 @@ class ThreatIntelligenceSearch:
                     credential=credential
                 )
                 
-                logger.info("✅ Azure AI Search client initialized")
+                logger.info(f"✅ Azure AI Search client initialized (index: {settings.AZURE_SEARCH_INDEX_NAME})")
             except Exception as e:
                 logger.warning(f"⚠️ Azure Search initialization failed: {e}")
                 self.search_client = None
                 self.index_client = None
         else:
-            logger.info("ℹ️ Azure Search disabled - no credentials provided")
+            logger.info("ℹ️ Azure Search disabled - missing AZURE_SEARCH_ENDPOINT or AZURE_SEARCH_KEY")
     
     async def ensure_index_exists(self) -> bool:
         """
