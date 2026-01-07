@@ -5,7 +5,7 @@ Provides semantic search over historical threat data
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from azure.core.credentials import AzureKeyCredential
@@ -202,8 +202,8 @@ class ThreatIntelligenceSearch:
                 "attack_patterns": threat_data.get("attack_patterns", []),
                 "threat_score": threat_data.get("threat_score", 0.0),
                 "confidence_score": threat_data.get("confidence_score", 0.0),
-                "first_seen": threat_data.get("first_seen", datetime.now(timezone.utc)).isoformat(),
-                "last_seen": threat_data.get("last_seen", datetime.now(timezone.utc)).isoformat(),
+                "first_seen": threat_data.get("first_seen", datetime.now(datetime.UTC)).isoformat(),
+                "last_seen": threat_data.get("last_seen", datetime.now(datetime.UTC)).isoformat(),
                 "kill_chain_stage": threat_data.get("kill_chain_stage", "Unknown"),
                 "network_context": json.dumps(threat_data.get("network_context", {})),
                 "occurrences": threat_data.get("occurrences", 1),
@@ -366,7 +366,7 @@ class ThreatIntelligenceSearch:
             
             # Increment occurrences
             threat["occurrences"] = threat.get("occurrences", 1) + 1
-            threat["last_seen"] = datetime.now(timezone.utc).isoformat()
+            threat["last_seen"] = datetime.now(datetime.UTC).isoformat()
             
             # Update document
             result = self.search_client.merge_or_upload_documents(documents=[threat])

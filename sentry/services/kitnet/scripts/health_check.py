@@ -93,7 +93,8 @@ def check_memory():
             "max_memory_mb": max_mem_mb,
             "healthy": healthy
         }
-    except OSError:  # Memory check fails gracefully
+    except OSError:
+        # Memory check is optional - gracefully return unavailable status
         return {"memory_check": "unavailable", "healthy": True}
 
 def main():

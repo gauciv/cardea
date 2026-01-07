@@ -5,7 +5,7 @@ Advanced threat analysis with AI-powered agentic reasoning
 
 import logging
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from openai import AsyncAzureOpenAI
@@ -317,7 +317,7 @@ Respond in JSON format:
             from sqlalchemy import text, select, func
             async with get_db() as db:
                 # Look for similar alerts in the last 24 hours
-                time_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+                time_threshold = datetime.now(datetime.UTC) - timedelta(hours=24)
                 
                 # Use SQLAlchemy ORM query instead of raw SQL
                 stmt = select(func.count()).select_from(Alert).where(
@@ -391,7 +391,7 @@ Respond in JSON format:
         
         try:
             from sqlalchemy import select, and_
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(datetime.UTC)
             start_time = end_time - timedelta(seconds=time_window)
             
             async with get_db() as db:

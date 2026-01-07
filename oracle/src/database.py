@@ -5,7 +5,7 @@ SQLAlchemy models for Oracle backend data persistence (Async PostgreSQL optimize
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -47,8 +47,8 @@ class Alert(Base):
     description = Column(Text, nullable=False)
     
     # Note: using timezone-aware defaults is better for Cloud/Azure deployments
-    timestamp = Column(DateTime(timezone=True), nullable=False, index=True, default=lambda: datetime.now(timezone.utc))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True, default=lambda: datetime.now(datetime.UTC))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(datetime.UTC))
     processed_at = Column(DateTime(timezone=True), nullable=True)
     
     threat_score = Column(Float, nullable=True)
@@ -83,10 +83,10 @@ class ThreatIntelligence(Base):
     tactics = Column(JSON, nullable=True)
     techniques = Column(JSON, nullable=True)
     
-    first_seen = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    last_seen = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    first_seen = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(datetime.UTC))
+    last_seen = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(datetime.UTC))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(datetime.UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(datetime.UTC), onupdate=lambda: datetime.now(datetime.UTC))
     
     alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=True)
     alerts = relationship("Alert", back_populates="threat_intel")

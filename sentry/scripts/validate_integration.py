@@ -8,10 +8,10 @@ Run with: python scripts/validate_integration.py
 
 import asyncio
 import sys
+
 import aiohttp
-from pathlib import Path
 from datetime import datetime
-from typing import Any
+from pathlib import Path
 
 # ANSI color codes
 GREEN = "\033[92m"

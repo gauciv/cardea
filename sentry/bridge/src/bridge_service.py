@@ -390,6 +390,7 @@ async def lifespan(app: FastAPI):
     try:
         await notice_task
     except asyncio.CancelledError:
+        # Expected during shutdown - task cancellation is intentional
         pass
 
 app = FastAPI(lifespan=lifespan)

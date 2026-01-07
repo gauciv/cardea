@@ -109,10 +109,8 @@ def test_bridge_service():
         sys.path.insert(0, str(Path("/workspaces/cardea/sentry/bridge/src").absolute()))
         from bridge_service import BridgeService
         
-        # Try to create instance (don't start it)
-        _bridge = BridgeService()  # Prefixed with _ to indicate intentionally unused
-        print("  ✅ Bridge service can be instantiated")
-        return True
+        # Try to create instance (don't start it) - verifies import works
+        BridgeService()
         
     except Exception as e:
         print(f"  ❌ Bridge service test failed: {e}")
@@ -126,10 +124,8 @@ def test_kitnet_service():
         sys.path.insert(0, str(Path("/workspaces/cardea/sentry/services/kitnet/src").absolute()))
         from network_monitor import NetworkMonitor
         
-        # NetworkMonitor takes no arguments in __init__
-        _monitor = NetworkMonitor()  # Prefixed with _ to indicate intentionally unused
-        print("  ✅ KitNET NetworkMonitor can be instantiated")
-        return True
+        # NetworkMonitor takes no arguments in __init__ - verifies import works
+        NetworkMonitor()
         
     except Exception as e:
         print(f"  ❌ KitNET service test failed: {e}")
