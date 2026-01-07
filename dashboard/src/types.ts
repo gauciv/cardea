@@ -10,14 +10,33 @@ export interface Alert {
     raw_data?: Record<string, any>;
   }
 
+  export interface ActionButton {
+    id: string;
+    label: string;
+    action_type: 'block_ip' | 'allow_ip' | 'lockdown' | 'monitor' | 'dismiss' | 'expand';
+    severity: 'danger' | 'warning' | 'info' | 'success';
+    target?: string;
+    description: string;
+  }
+
   export interface AIInsight {
-    summary: string;
-    what_happened: string;
-    why_it_matters: string;
-    recommended_actions: string[];
+    // New conversational format
+    greeting: string;
+    status_emoji: string;
+    headline: string;
+    story: string;
+    actions_taken: string[];
+    decisions: ActionButton[];
+    technical_summary?: string;
     confidence: number;
     generated_at?: string;
     ai_powered: boolean;
+    
+    // Legacy fields for backward compatibility
+    summary?: string;
+    what_happened?: string;
+    why_it_matters?: string;
+    recommended_actions?: string[];
   }
   
   export interface AnalyticsResponse {
