@@ -82,17 +82,21 @@ elif [ "$SURICATA_MODE" = "offline" ]; then
 else
     echo "🌐 Live capture mode - starting intrusion detection"
     
-    # Auto-detect interface if not specified
-    if [ -z "$SURICATA_INTERFACE" ] || [ "$SURICATA_INTERFACE" = "auto" ]; then
-        # Look for first non-loopback interface that's UP
-        DETECTED=$(ip -o link show | grep -v 'lo:' | grep 'state UP' | head -1 | awk -F': ' '{print $2}')
+    # Auto-detect interface if not specified OR if specified interface doesn't exist
+    if [ -z "$SURICATA_INTERFACE" ] || [ "$SURICATA_INTERFACE" = "auto" ] || ! ip link show "$SURICATA_INTERFACE" >/dev/null 2>&1; then
+        if [ -n "$SURICATA_INTERFACE" ] && [ "$SURICATA_INTERFACE" != "auto" ]; then
+            echo "⚠️ Configured interface '$SURICATA_INTERFACE' not found, auto-detecting..."
+        fi
+        
+        # Look for first non-loopback interface that's UP (exclude docker/veth interfaces)
+        DETECTED=$(ip -o link show | grep -v 'lo:' | grep -v 'docker' | grep -v 'veth' | grep -v 'br-' | grep 'state UP' | head -1 | awk -F': ' '{print $2}')
         
         if [ -n "$DETECTED" ]; then
             export SURICATA_INTERFACE="$DETECTED"
             echo "✅ Auto-detected interface: $SURICATA_INTERFACE"
         else
-            # Fallback: any interface that's not loopback
-            DETECTED=$(ip -o link show | grep -v 'lo:' | head -1 | awk -F': ' '{print $2}')
+            # Fallback: any interface that's not loopback/docker/veth
+            DETECTED=$(ip -o link show | grep -v 'lo:' | grep -v 'docker' | grep -v 'veth' | grep -v 'br-' | head -1 | awk -F': ' '{print $2}')
             if [ -n "$DETECTED" ]; then
                 export SURICATA_INTERFACE="$DETECTED"
                 echo "⚠️ Using first available interface: $SURICATA_INTERFACE"
@@ -108,9 +112,11 @@ else
                 exec "$0"
             fi
         fi
+    else
+        echo "✅ Using configured interface: $SURICATA_INTERFACE"
     fi
     
-    # Verify interface exists
+    # Verify interface exists (should always pass now since we check above)
     if ! ip link show "$SURICATA_INTERFACE" >/dev/null 2>&1; then
         echo "❌ Interface $SURICATA_INTERFACE not found"
         echo "   Available interfaces:"

@@ -46,17 +46,21 @@ elif [ "$ZEEK_MODE" = "offline" ]; then
 else
     echo "🌐 Live capture mode - attempting network monitoring"
     
-    # Auto-detect interface if not specified or set to "auto"
-    if [ -z "$ZEEK_INTERFACE" ] || [ "$ZEEK_INTERFACE" = "auto" ]; then
-        # Look for first non-loopback interface
-        DETECTED=$(ip -o link show | grep -v 'lo:' | grep 'state UP' | head -1 | awk -F': ' '{print $2}')
+    # Auto-detect interface if not specified, set to "auto", or if specified interface doesn't exist
+    if [ -z "$ZEEK_INTERFACE" ] || [ "$ZEEK_INTERFACE" = "auto" ] || ! ip link show "$ZEEK_INTERFACE" >/dev/null 2>&1; then
+        if [ -n "$ZEEK_INTERFACE" ] && [ "$ZEEK_INTERFACE" != "auto" ]; then
+            echo "⚠️ Configured interface '$ZEEK_INTERFACE' not found, auto-detecting..."
+        fi
+        
+        # Look for first non-loopback interface (exclude docker/veth interfaces)
+        DETECTED=$(ip -o link show | grep -v 'lo:' | grep -v 'docker' | grep -v 'veth' | grep -v 'br-' | grep 'state UP' | head -1 | awk -F': ' '{print $2}')
         
         if [ -n "$DETECTED" ]; then
             export ZEEK_INTERFACE="$DETECTED"
             echo "✅ Auto-detected interface: $ZEEK_INTERFACE"
         else
-            # Fallback: any interface that's not loopback
-            DETECTED=$(ip -o link show | grep -v 'lo:' | head -1 | awk -F': ' '{print $2}')
+            # Fallback: any interface that's not loopback/docker/veth
+            DETECTED=$(ip -o link show | grep -v 'lo:' | grep -v 'docker' | grep -v 'veth' | grep -v 'br-' | head -1 | awk -F': ' '{print $2}')
             if [ -n "$DETECTED" ]; then
                 export ZEEK_INTERFACE="$DETECTED"
                 echo "⚠️  Using first available interface: $ZEEK_INTERFACE"
@@ -73,9 +77,11 @@ else
                 exec "$0"  # Re-run in offline mode
             fi
         fi
+    else
+        echo "✅ Using configured interface: $ZEEK_INTERFACE"
     fi
     
-    # Verify interface exists and is accessible
+    # Verify interface exists (should always pass now since we check above)
     if ! ip link show "$ZEEK_INTERFACE" >/dev/null 2>&1; then
         echo "❌ Interface $ZEEK_INTERFACE not found"
         exit 1

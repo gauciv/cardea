@@ -33,10 +33,9 @@ GLOBAL_MINUTE_LIMIT = 50        # Hard cap: Max 50 AI-processed alerts per minut
 AI_MAX_RESPONSE_TOKENS = 150    # Force brevity to save output tokens
 
 # Initialize Redis client for safeguards
-redis_client = redis.from_url(
-    f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379/0", 
-    decode_responses=True
-)
+# Use REDIS_URL if provided (docker-compose), otherwise fallback to building from REDIS_HOST
+redis_url = os.getenv('REDIS_URL', f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379/0")
+redis_client = redis.from_url(redis_url, decode_responses=True)
 
 async def check_abuse_safeguards(alert: AlertRequest) -> bool:
     """
