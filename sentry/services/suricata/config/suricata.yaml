@@ -55,10 +55,15 @@ outputs:
       append: yes
 
   # EVE JSON - Primary structured output
+  # IMPORTANT: Log rotation to prevent disk exhaustion (was 68GB+!)
   - eve-log:
       enabled: yes
       filetype: regular
       filename: eve.json
+      # Log rotation settings - CRITICAL for disk space
+      rotate-interval: hour      # Rotate logs every hour
+      rotate: yes                # Enable rotation
+      # Note: Suricata doesn't have max-size, cleanup done via cleanup-logs.sh
       pcap-file: false
       community-id: true  # Enable community ID for correlation with Zeek
       community-id-seed: 0

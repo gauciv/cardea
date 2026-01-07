@@ -8,7 +8,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import redis.asyncio as redis
@@ -257,7 +257,293 @@ def create_app() -> FastAPI:
             logger.error(f"Analytics Error: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
     
+    # ===========================================
+    # SECURITY ACTION ENDPOINTS - Real execution
+    # ===========================================
+    
+    @app.post("/api/actions/execute")
+    async def execute_security_action(request: dict[str, Any]):
+        """
+        Execute a security action requested by the user.
+        This is where the AI's recommendations become real actions.
+        """
+        from models import SecurityActionResponse, BlockedEntity
+        
+        action_type = request.get("action_type")
+        target = request.get("target")
+        action_id = request.get("action_id", f"action_{int(datetime.now(timezone.utc).timestamp())}")
+        duration = request.get("duration_minutes", 60)
+        
+        logger.info(f"🎯 Executing security action: {action_type} on {target}")
+        
+        try:
+            if action_type == "block_ip":
+                # Block one or more IP addresses
+                ips = [ip.strip() for ip in (target or "").split(",") if ip.strip()]
+                if not ips:
+                    raise HTTPException(status_code=400, detail="No IP addresses provided")
+                
+                # Store blocked IPs in Redis with expiration
+                blocked = []
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=duration)
+                
+                for ip in ips:
+                    block_key = f"blocked:ip:{ip}"
+                    await redis_client.setex(
+                        block_key, 
+                        duration * 60,  # TTL in seconds
+                        json.dumps({
+                            "ip": ip,
+                            "blocked_at": datetime.now(timezone.utc).isoformat(),
+                            "blocked_by": "user_action",
+                            "reason": "User requested block via dashboard",
+                            "expires_at": expires_at.isoformat()
+                        })
+                    )
+                    blocked.append(ip)
+                    logger.info(f"🚫 Blocked IP: {ip} for {duration} minutes")
+                
+                # Notify Sentry Bridge to update firewall rules
+                await notify_sentry_block_ips(ips)
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message=f"Blocked {len(blocked)} IP address{'es' if len(blocked) > 1 else ''}. They won't be able to connect to your network for the next {duration} minutes.",
+                    details={"blocked_ips": blocked, "duration_minutes": duration},
+                    expires_at=expires_at,
+                    can_undo=True
+                )
+            
+            elif action_type == "lockdown":
+                # Enable lockdown mode - block all new incoming connections
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=duration)
+                
+                await redis_client.setex(
+                    "system:lockdown",
+                    duration * 60,
+                    json.dumps({
+                        "enabled": True,
+                        "enabled_at": datetime.now(timezone.utc).isoformat(),
+                        "enabled_by": "user_action",
+                        "expires_at": expires_at.isoformat()
+                    })
+                )
+                
+                # Notify Sentry Bridge to enable lockdown
+                await notify_sentry_lockdown(True, duration)
+                
+                logger.warning(f"🔒 LOCKDOWN MODE ENABLED for {duration} minutes")
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message=f"Lockdown mode activated! All new incoming connections are blocked for {duration} minutes. Your existing connections will continue working.",
+                    details={"duration_minutes": duration},
+                    expires_at=expires_at,
+                    can_undo=True
+                )
+            
+            elif action_type == "monitor":
+                # Enable enhanced monitoring mode
+                await redis_client.setex(
+                    "system:enhanced_monitoring",
+                    duration * 60,
+                    json.dumps({
+                        "enabled": True,
+                        "enabled_at": datetime.now(timezone.utc).isoformat(),
+                        "target": target
+                    })
+                )
+                
+                logger.info(f"👁️ Enhanced monitoring enabled for {duration} minutes")
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message=f"Enhanced monitoring activated. I'll watch this activity closely and alert you immediately if anything changes.",
+                    details={"duration_minutes": duration, "target": target},
+                    can_undo=True
+                )
+            
+            elif action_type == "dismiss":
+                # Mark alerts as reviewed/dismissed
+                await redis_client.setex(
+                    f"dismissed:{action_id}",
+                    86400 * 7,  # Keep for 7 days
+                    json.dumps({
+                        "dismissed_at": datetime.now(timezone.utc).isoformat(),
+                        "target": target
+                    })
+                )
+                
+                logger.info(f"✓ Alerts dismissed by user")
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message="Got it! I've marked these alerts as reviewed. I'll keep them in the logs for your records.",
+                    details={},
+                    can_undo=False
+                )
+            
+            elif action_type == "allow_ip":
+                # Whitelist an IP address
+                ips = [ip.strip() for ip in (target or "").split(",") if ip.strip()]
+                
+                for ip in ips:
+                    # Remove from blocked list if present
+                    await redis_client.delete(f"blocked:ip:{ip}")
+                    # Add to allowlist
+                    await redis_client.sadd("allowlist:ips", ip)
+                
+                logger.info(f"✅ Allowed IPs: {ips}")
+                
+                return SecurityActionResponse(
+                    success=True,
+                    action_id=action_id,
+                    action_type=action_type,
+                    message=f"Added {len(ips)} address{'es' if len(ips) > 1 else ''} to your trusted list. I won't flag these as suspicious anymore.",
+                    details={"allowed_ips": ips},
+                    can_undo=True
+                )
+            
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown action type: {action_type}")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Action execution failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+    
+    @app.post("/api/actions/undo")
+    async def undo_security_action(request: dict[str, Any]):
+        """Undo a previous security action"""
+        action_type = request.get("action_type")
+        target = request.get("target")
+        
+        try:
+            if action_type == "block_ip":
+                ips = [ip.strip() for ip in (target or "").split(",") if ip.strip()]
+                for ip in ips:
+                    await redis_client.delete(f"blocked:ip:{ip}")
+                await notify_sentry_unblock_ips(ips)
+                return {"success": True, "message": f"Unblocked {len(ips)} IP address(es)"}
+            
+            elif action_type == "lockdown":
+                await redis_client.delete("system:lockdown")
+                await notify_sentry_lockdown(False, 0)
+                return {"success": True, "message": "Lockdown mode disabled"}
+            
+            elif action_type == "allow_ip":
+                ips = [ip.strip() for ip in (target or "").split(",") if ip.strip()]
+                for ip in ips:
+                    await redis_client.srem("allowlist:ips", ip)
+                return {"success": True, "message": f"Removed {len(ips)} from trusted list"}
+            
+            else:
+                return {"success": False, "message": "This action cannot be undone"}
+                
+        except Exception as e:
+            logger.error(f"Undo action failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+    
+    @app.get("/api/status")
+    async def get_system_status():
+        """Get current system status for dashboard"""
+        try:
+            # Check lockdown status
+            lockdown_data = await redis_client.get("system:lockdown")
+            lockdown_active = False
+            lockdown_expires = None
+            if lockdown_data:
+                ld = json.loads(lockdown_data)
+                lockdown_active = ld.get("enabled", False)
+                lockdown_expires = ld.get("expires_at")
+            
+            # Count blocked IPs
+            blocked_keys = []
+            async for key in redis_client.scan_iter("blocked:ip:*"):
+                blocked_keys.append(key)
+            
+            # Check enhanced monitoring
+            monitoring_data = await redis_client.get("system:enhanced_monitoring")
+            monitoring_enhanced = monitoring_data is not None
+            
+            return {
+                "lockdown_active": lockdown_active,
+                "lockdown_expires": lockdown_expires,
+                "blocked_ips_count": len(blocked_keys),
+                "monitoring_enhanced": monitoring_enhanced,
+                "deployment_env": settings.DEPLOYMENT_ENVIRONMENT,
+                "alerts_processed": await get_alerts_count()
+            }
+        except Exception as e:
+            logger.error(f"Status check failed: {e}")
+            return {
+                "lockdown_active": False,
+                "blocked_ips_count": 0,
+                "monitoring_enhanced": False,
+                "error": str(e)
+            }
+    
+    @app.get("/api/blocked")
+    async def get_blocked_entities():
+        """Get list of currently blocked IPs/domains"""
+        blocked = []
+        try:
+            async for key in redis_client.scan_iter("blocked:ip:*"):
+                data = await redis_client.get(key)
+                if data:
+                    blocked.append(json.loads(data))
+            return {"blocked": blocked, "count": len(blocked)}
+        except Exception as e:
+            logger.error(f"Failed to get blocked list: {e}")
+            return {"blocked": [], "count": 0, "error": str(e)}
+    
     return app
+
+
+# --- Helper functions to notify Sentry Bridge ---
+
+async def notify_sentry_block_ips(ips: list[str]):
+    """Notify Sentry Bridge to block IPs at the firewall level"""
+    import httpx
+    bridge_url = os.getenv("SENTRY_BRIDGE_URL", "http://cardea-bridge:8001")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(f"{bridge_url}/api/firewall/block", json={"ips": ips}, timeout=5.0)
+    except Exception as e:
+        logger.warning(f"Failed to notify Sentry Bridge for IP block: {e}")
+
+async def notify_sentry_unblock_ips(ips: list[str]):
+    """Notify Sentry Bridge to unblock IPs"""
+    import httpx
+    bridge_url = os.getenv("SENTRY_BRIDGE_URL", "http://cardea-bridge:8001")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(f"{bridge_url}/api/firewall/unblock", json={"ips": ips}, timeout=5.0)
+    except Exception as e:
+        logger.warning(f"Failed to notify Sentry Bridge for IP unblock: {e}")
+
+async def notify_sentry_lockdown(enable: bool, duration_minutes: int):
+    """Notify Sentry Bridge to enable/disable lockdown mode"""
+    import httpx
+    bridge_url = os.getenv("SENTRY_BRIDGE_URL", "http://cardea-bridge:8001")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{bridge_url}/api/firewall/lockdown",
+                json={"enable": enable, "duration_minutes": duration_minutes},
+                timeout=5.0
+            )
+    except Exception as e:
+        logger.warning(f"Failed to notify Sentry Bridge for lockdown: {e}")
 
 async def generate_ai_insight(analytics_data: dict[str, Any], threat_analyzer: ThreatAnalyzer):
     """Generate conversational, actionable AI insight for non-technical users"""

@@ -2,6 +2,13 @@
 # Docker Compose configuration for local edge layer development
 # Optimized for Consumer UI Development and WLAN Sniffing
 
+# Global logging defaults to prevent disk space exhaustion
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   zeek:
     user: "root"
@@ -13,6 +20,7 @@ services:
       dockerfile: Dockerfile
     container_name: cardea-zeek
     network_mode: "host"
+    logging: *default-logging
     volumes:
       - ./data/zeek:/opt/zeek/logs
       - ./services/zeek/config:/opt/zeek/etc
@@ -34,7 +42,9 @@ services:
       dockerfile: Dockerfile
     container_name: cardea-suricata
     network_mode: "host"
+    logging: *default-logging
     volumes:
+      # IMPORTANT: Limit Suricata log retention to prevent disk exhaustion
       - ./data/suricata:/var/log/suricata
       - ./services/suricata/config:/etc/suricata/custom
     environment:

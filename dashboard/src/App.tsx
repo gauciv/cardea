@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   Shield, Activity, Zap, Server, AlertCircle, AlertTriangle, Info, XCircle,
-  Sparkles, CheckCircle2, WifiOff, RefreshCw
+  Sparkles, CheckCircle2, WifiOff, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 import type { AnalyticsResponse, Alert, AIInsight } from './types'; 
 import { ThreatOverview } from './components/ThreatOverview';
@@ -308,35 +308,61 @@ const App: React.FC = () => {
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
-  // Handle security action decisions from AI Insight Card
-  const handleSecurityAction = useCallback(async (action: { id: string; action_type: string; target?: string }) => {
-    console.log('Security action triggered:', action);
-    
-    // For now, show a confirmation and log
-    // In production, this would call the Oracle API to execute the action
-    switch (action.action_type) {
-      case 'block_ip':
-        alert(`✅ Blocking IP addresses: ${action.target}\n\nCardea will prevent these addresses from connecting to your network.`);
-        break;
-      case 'lockdown':
-        alert('🔒 Lockdown Mode Activated\n\nAll new incoming connections will be blocked for 1 hour. Existing connections will continue working.');
-        break;
-      case 'monitor':
-        alert('👁️ Enhanced Monitoring Enabled\n\nCardea will watch this activity more closely and alert you if it escalates.');
-        break;
-      case 'dismiss':
-        alert('✓ Alerts Dismissed\n\nThese alerts have been marked as reviewed.');
-        break;
-      case 'expand':
-        // This is handled in the component itself
-        break;
-      default:
-        console.log('Unknown action:', action.action_type);
+  // View mode: 'simple' (default) or 'detailed'
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
+  
+  // System status (lockdown, blocked IPs, etc.)
+  const [systemStatus, setSystemStatus] = useState<{
+    lockdown_active: boolean;
+    blocked_ips_count: number;
+    monitoring_enhanced: boolean;
+  } | null>(null);
+
+  // Fetch system status
+  const fetchSystemStatus = useCallback(async () => {
+    try {
+      const res = await axios.get(`${ORACLE_URL}/api/status`, { timeout: 5000 });
+      setSystemStatus(res.data);
+    } catch (err) {
+      console.warn('Could not fetch system status');
     }
+  }, []);
+
+  useEffect(() => {
+    fetchSystemStatus();
+    const interval = setInterval(fetchSystemStatus, 10000);
+    return () => clearInterval(interval);
+  }, [fetchSystemStatus]);
+
+  // Handle security action decisions - REAL API CALLS
+  const handleSecurityAction = useCallback(async (action: { id: string; action_type: string; target?: string }) => {
+    console.log('🎯 Executing security action:', action);
     
-    // Refresh data after action
-    await fetchData();
-  }, [fetchData]);
+    // Don't execute 'expand' actions - those are handled in the component
+    if (action.action_type === 'expand') return;
+    
+    try {
+      const res = await axios.post(`${ORACLE_URL}/api/actions/execute`, {
+        action_id: action.id,
+        action_type: action.action_type,
+        target: action.target,
+        duration_minutes: 60  // Default 1 hour
+      }, { timeout: 10000 });
+      
+      if (res.data.success) {
+        // Show success message from the backend
+        alert(`✅ ${res.data.message}`);
+        
+        // Refresh data and status
+        await Promise.all([fetchData(), fetchSystemStatus()]);
+      } else {
+        alert(`⚠️ Action failed: ${res.data.message}`);
+      }
+    } catch (err: any) {
+      console.error('Action execution failed:', err);
+      alert(`❌ Failed to execute action: ${err.response?.data?.detail || err.message}`);
+    }
+  }, [fetchData, fetchSystemStatus]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">

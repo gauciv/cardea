@@ -1,0 +1,51 @@
+# Docker build context ignore
+# Reduces build context size and speeds up builds
+
+# Data directories (can be 68GB+!)
+data/
+*.log
+*.pcap
+*.json
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.eggs/
+*.egg-info/
+.pytest_cache/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Tests (not needed in production image)
+tests/
+test_*.py
+*_test.py
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar
+*.tar.gz
+*.zip

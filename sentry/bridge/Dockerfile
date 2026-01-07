@@ -1,37 +1,39 @@
 # Bridge Service - Orchestration Layer
-FROM python:3.9-slim
+# Optimized for smaller image size and faster builds
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+FROM python:3.11-slim
+
+# Install system dependencies in single layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Create app directory
 WORKDIR /app
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install Python dependencies (no build tools needed for these packages)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/config
 
-# Copy application code
+# Copy application code AFTER dependencies
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-# Create non-root user
-RUN useradd -r -s /bin/false bridge
-RUN chown -R bridge:bridge /app
+# Create non-root user in single layer
+RUN useradd -r -s /bin/false bridge \
+    && chown -R bridge:bridge /app
 
 # Environment variables
 ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=info
 ENV PORT=8001
 
-# Expose port
 EXPOSE 8001
 
 # Health check

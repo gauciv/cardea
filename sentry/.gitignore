@@ -1,0 +1,22 @@
+# Sentry data directories - DO NOT COMMIT (can be 100GB+)
+data/
+*.log
+*.pcap
+
+# Docker
+.docker/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
