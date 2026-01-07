@@ -48,8 +48,7 @@ interface LoginPageProps {
 const LoginPage: React.FC<LoginPageProps> = () => {
   const navigate = useNavigate();
   const {
-    login,
-    loginWithGoogle,
+    loginWithMicrosoft,
     isAuthenticated,
     isLoading: authLoading,
     azureAuthEnabled,
@@ -122,14 +121,20 @@ const LoginPage: React.FC<LoginPageProps> = () => {
    * Handle Microsoft Sign In
    */
   const handleMicrosoftSignIn = async () => {
+    console.log('🟦 Microsoft Sign-In button clicked');
+    console.log('Azure Auth Enabled:', azureAuthEnabled);
+    console.log('Auth Loading:', authLoading);
+    
     try {
       setError(null);
-      await login();
-      // Note: After login(), the app will redirect via Azure,
-      // then the useEffect above will handle navigation to dashboard
-    } catch (err) {
-      console.error("Microsoft sign in failed:", err);
-      setError("Microsoft sign in failed. Please try again.");
+      console.log('🟦 Calling loginWithMicrosoft...');
+      await loginWithMicrosoft();
+      console.log('✅ Login successful, navigating to dashboard');
+      // Note: After login, user will be redirected to dashboard
+      navigate("/dashboard");
+    } catch (err: any) {
+      console.error("❌ Microsoft sign in failed:", err);
+      setError(err.message || "Microsoft sign in failed. Please try again.");
     }
   };
 
@@ -139,11 +144,37 @@ const LoginPage: React.FC<LoginPageProps> = () => {
   const handleGoogleCallback = async (response: any) => {
     try {
       setError(null);
-      await loginWithGoogle(response);
-      // AuthContext will handle the rest
+      setIsLoading(true);
+      
+      // Extract credential from response
+      const credential = response.credential;
+      
+      // Send credential to backend for validation
+      const apiResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/google/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ credential }),
+      });
+
+      if (!apiResponse.ok) {
+        throw new Error('Google authentication failed');
+      }
+
+      const data = await apiResponse.json();
+      
+      // Store user data and token
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      
+      // Navigate to dashboard
+      navigate('/dashboard');
     } catch (err) {
       console.error('Google sign in failed:', err);
       setError('Google sign in failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 

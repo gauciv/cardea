@@ -19,9 +19,8 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 msal==1.26.0
+google-auth==2.27.0
 cryptography==41.0.7
-PyJWT==2.8.0
-google-auth==2.25.2
 
 # HTTP Client for Sentry communication
 httpx==0.25.2
@@ -51,5 +50,9 @@ python-dateutil==2.8.2
 pytest==7.4.3
 pytest-asyncio==0.21.1
 
-# Environment Configuration
+# Authentication packages
 python-dotenv==1.0.0
+msal==1.25.0
+python-jose[cryptography]==3.3.0
+PyJWT==2.8.0
+cryptography==41.0.7

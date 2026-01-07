@@ -8,8 +8,11 @@ import type { Configuration } from '@azure/msal-browser';
 // Read environment variables
 const AZURE_CLIENT_ID = import.meta.env.VITE_AZURE_CLIENT_ID || '';
 const AZURE_TENANT_ID = import.meta.env.VITE_AZURE_TENANT_ID || '';
-const AZURE_AUTHORITY = import.meta.env.VITE_AZURE_AUTHORITY || 
-  `https://login.microsoftonline.com/${AZURE_TENANT_ID}`;
+const AZURE_TENANT_NAME = import.meta.env.VITE_AZURE_TENANT_NAME || '';
+// For External ID, use the full authority with tenant ID
+const AZURE_AUTHORITY = import.meta.env.VITE_AZURE_AUTHORITY 
+  ? `${import.meta.env.VITE_AZURE_AUTHORITY}${AZURE_TENANT_ID}`
+  : `https://login.microsoftonline.com/${AZURE_TENANT_ID}`;
 const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || window.location.origin;
 const POST_LOGOUT_REDIRECT_URI = import.meta.env.VITE_POST_LOGOUT_REDIRECT_URI || window.location.origin;
 
@@ -74,10 +77,10 @@ export const msalConfig: Configuration = {
 
 /**
  * Scopes required for login
- * These determine what information and permissions your app requests from Microsoft
+ * For External ID, use basic OIDC scopes
  */
 export const loginRequest = {
-  scopes: ['openid', 'profile', 'email', 'User.Read'],
+  scopes: ['openid', 'profile', 'email'],
 };
 
 /**

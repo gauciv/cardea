@@ -1,394 +1,276 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { 
-  InteractionRequiredAuthError,
-  EventType,
-} from '@azure/msal-browser';
-import type {
-  AuthenticationResult,
-  AccountInfo,
-  EventMessage,
-} from '@azure/msal-browser';
-import { 
-  msalInstance, 
-  loginRequest, 
-  apiRequest, 
-  isAzureAuthEnabled, 
-  isGoogleAuthEnabled,
-  API_URL 
-} from '../authConfig';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { PublicClientApplication } from '@azure/msal-browser';
+import type { AuthenticationResult } from '@azure/msal-browser';
+import { msalConfig, loginRequest, isAzureAuthEnabled } from '../authConfig';
 
-/**
- * Authentication Provider Type
- */
-export type AuthProvider = 'microsoft' | 'google' | 'traditional' | null;
+// Initialize MSAL instance
+let msalInstance: PublicClientApplication | null = null;
 
-/**
- * User Interface - Unified user object from different providers
- */
-export interface User {
+// Initialize MSAL with error handling
+const initializeMsal = async () => {
+  if (isAzureAuthEnabled()) {
+    try {
+      msalInstance = new PublicClientApplication(msalConfig);
+      await msalInstance.initialize();
+      console.log('✅ MSAL initialized successfully');
+      console.log('Authority:', msalConfig.auth.authority);
+      console.log('Client ID:', msalConfig.auth.clientId);
+    } catch (error) {
+      console.error('❌ Failed to initialize MSAL:', error);
+      msalInstance = null;
+    }
+  } else {
+    console.warn('⚠️ Azure authentication is disabled');
+  }
+};
+
+interface User {
   id: string;
   email: string;
   name: string;
-  provider: AuthProvider;
-  profilePicture?: string;
-  accessToken: string;
+  provider: 'azure' | 'google' | 'traditional';
+  picture?: string;
 }
 
-/**
- * Auth Context Interface
- */
 interface AuthContextType {
-  // State
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  error: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  loginWithMicrosoft: () => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
   azureAuthEnabled: boolean;
   googleAuthEnabled: boolean;
-
-  // Microsoft Auth Methods
-  login: () => Promise<void>;
-  loginPopup: () => Promise<void>;
-  logout: () => Promise<void>;
-  
-  // Google Auth Methods
-  loginWithGoogle: (credentialResponse: any) => Promise<void>;
-  
-  // Token Management
-  getAccessToken: () => Promise<string | null>;
-  
-  // Error Handling
-  clearError: () => void;
 }
 
-/**
- * Create Auth Context
- */
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Auth Provider Component
- */
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const azureAuthEnabled = isAzureAuthEnabled();
-  const googleAuthEnabled = isGoogleAuthEnabled();
+  const [azureAuthEnabled, setAzureAuthEnabled] = useState(false);
+  const [googleAuthEnabled] = useState(
+    import.meta.env.VITE_ENABLE_GOOGLE_AUTH === 'true'
+  );
 
-  /**
-   * Convert Microsoft account to User object
-   */
-  const convertMicrosoftAccountToUser = (
-    account: AccountInfo, 
-    accessToken: string
-  ): User => {
-    return {
-      id: account.localAccountId,
-      email: account.username,
-      name: account.name || account.username,
-      provider: 'microsoft',
-      accessToken,
-    };
-  };
-
-  /**
-   * Convert Google credential to User object
-   */
-  const convertGoogleCredentialToUser = async (
-    credentialResponse: any
-  ): Promise<User> => {
-    // Decode JWT token to get user info
-    const token = credentialResponse.credential;
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    
-    return {
-      id: payload.sub,
-      email: payload.email,
-      name: payload.name,
-      provider: 'google',
-      profilePicture: payload.picture,
-      accessToken: token,
-    };
-  };
-
-  /**
-   * Initialize Microsoft Authentication
-   */
   useEffect(() => {
-    if (!azureAuthEnabled || !msalInstance) {
-      setIsLoading(false);
-      return;
-    }
-
-    const initializeMsal = async () => {
-      try {
-        await msalInstance.initialize();
-        
-        // Handle redirect promise
-        const response = await msalInstance.handleRedirectPromise();
-        
-        if (response) {
-          // User just logged in via redirect
-          const account = response.account;
-          if (account) {
-            msalInstance.setActiveAccount(account);
-            const userObj = convertMicrosoftAccountToUser(account, response.accessToken);
-            setUser(userObj);
-            
-            // Send token to backend for validation and user creation
-            await validateTokenWithBackend(response.accessToken, 'microsoft');
-          }
-        } else {
-          // Check if user is already logged in
-          const accounts = msalInstance.getAllAccounts();
-          if (accounts.length > 0) {
-            const account = accounts[0];
-            msalInstance.setActiveAccount(account);
-            
-            // Try to get token silently
-            try {
-              const tokenResponse = await msalInstance.acquireTokenSilent({
-                ...apiRequest,
-                account: account,
-              });
-              
-              const userObj = convertMicrosoftAccountToUser(account, tokenResponse.accessToken);
-              setUser(userObj);
-              
-              await validateTokenWithBackend(tokenResponse.accessToken, 'microsoft');
-            } catch (err) {
-              console.error('Silent token acquisition failed:', err);
-            }
-          }
-        }
-      } catch (err) {
-        console.error('MSAL initialization error:', err);
-        setError('Failed to initialize Microsoft authentication');
-      } finally {
-        setIsLoading(false);
-      }
+    // Initialize MSAL and check session
+    const init = async () => {
+      await initializeMsal();
+      setAzureAuthEnabled(isAzureAuthEnabled() && msalInstance !== null);
+      await checkExistingSession();
     };
+    init();
+  }, []);
 
-    initializeMsal();
-
-    // Register event callbacks
-    const callbackId = msalInstance.addEventCallback((event: EventMessage) => {
-      if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
-        const payload = event.payload as AuthenticationResult;
-        const account = payload.account;
-        msalInstance.setActiveAccount(account);
-      }
-    });
-
-    return () => {
-      if (callbackId) {
-        msalInstance.removeEventCallback(callbackId);
-      }
-    };
-  }, [azureAuthEnabled]);
-
-  /**
-   * Validate token with backend and create/update user
-   */
-  const validateTokenWithBackend = async (token: string, provider: AuthProvider) => {
+  const checkExistingSession = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/auth/oauth/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ provider }),
-      });
+      setIsLoading(true);
+      
+      // Check localStorage for session
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('access_token');
+      
+      if (storedUser && storedToken) {
+        setUser(JSON.parse(storedUser));
+      } else if (msalInstance) {
+        // Check MSAL cache for Microsoft session
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+          const account = accounts[0];
+          setUser({
+            id: account.localAccountId,
+            email: account.username,
+            name: account.name || account.username,
+            provider: 'azure',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking session:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username: email, password }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Token validation failed');
+        const error = await response.json();
+        throw new Error(error.detail || 'Login failed');
       }
 
       const data = await response.json();
-      console.log('Token validated successfully:', data);
-    } catch (err) {
-      console.error('Backend token validation error:', err);
-      // Don't throw - allow frontend auth to continue even if backend validation fails
+      
+      const userData: User = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.full_name || data.user.email,
+        provider: 'traditional',
+      };
+
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('access_token', data.access_token);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  /**
-   * Microsoft Login - Redirect Flow (Recommended for production)
-   */
-  const login = useCallback(async () => {
-    if (!azureAuthEnabled || !msalInstance) {
-      setError('Microsoft authentication is not enabled');
-      return;
+  const loginWithMicrosoft = async () => {
+    console.log('🔵 Microsoft login initiated');
+    console.log('MSAL Instance:', msalInstance ? 'Available' : 'NULL');
+    console.log('Azure Auth Enabled:', azureAuthEnabled);
+    
+    if (!msalInstance) {
+      const errorMsg = 'Microsoft authentication is not configured. Check console for MSAL initialization errors.';
+      console.error('❌', errorMsg);
+      alert(errorMsg);
+      throw new Error(errorMsg);
     }
 
+    setIsLoading(true);
     try {
-      setError(null);
-      setIsLoading(true);
-      await msalInstance.loginRedirect(loginRequest);
-      // User will be redirected to Microsoft login page
-      // After login, they'll be redirected back and handleRedirectPromise will handle it
-    } catch (err: any) {
-      console.error('Microsoft login error:', err);
-      setError(err.message || 'Microsoft login failed');
-      setIsLoading(false);
-    }
-  }, [azureAuthEnabled]);
-
-  /**
-   * Microsoft Login - Popup Flow (Alternative)
-   */
-  const loginPopup = useCallback(async () => {
-    if (!azureAuthEnabled || !msalInstance) {
-      setError('Microsoft authentication is not enabled');
-      return;
-    }
-
-    try {
-      setError(null);
-      setIsLoading(true);
+      console.log('🔵 Opening Microsoft login popup...');
+      console.log('Login request scopes:', loginRequest.scopes);
       
-      const response = await msalInstance.loginPopup(loginRequest);
+      // Trigger Microsoft login popup
+      const loginResponse: AuthenticationResult = await msalInstance.loginPopup(loginRequest);
       
-      if (response.account) {
-        msalInstance.setActiveAccount(response.account);
-        const userObj = convertMicrosoftAccountToUser(response.account, response.accessToken);
-        setUser(userObj);
-        
-        await validateTokenWithBackend(response.accessToken, 'microsoft');
-      }
-    } catch (err: any) {
-      console.error('Microsoft login popup error:', err);
-      setError(err.message || 'Microsoft login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [azureAuthEnabled]);
+      console.log('✅ Microsoft login successful:', loginResponse.account?.username);
+      console.log('ID Token received:', loginResponse.idToken ? 'Yes' : 'No');
 
-  /**
-   * Google Login
-   */
-  const loginWithGoogle = useCallback(async (credentialResponse: any) => {
-    if (!googleAuthEnabled) {
-      setError('Google authentication is not enabled');
-      return;
-    }
+      // For External ID, use the ID token (not access token)
+      // The idToken contains user claims and is what we validate on backend
+      const token = loginResponse.idToken;
 
-    try {
-      setError(null);
-      setIsLoading(true);
-      
-      const userObj = await convertGoogleCredentialToUser(credentialResponse);
-      setUser(userObj);
-      
-      await validateTokenWithBackend(credentialResponse.credential, 'google');
-    } catch (err: any) {
-      console.error('Google login error:', err);
-      setError(err.message || 'Google login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [googleAuthEnabled]);
-
-  /**
-   * Logout
-   */
-  const logout = useCallback(async () => {
-    try {
-      setError(null);
-      
-      if (user?.provider === 'microsoft' && msalInstance) {
-        const account = msalInstance.getActiveAccount();
-        await msalInstance.logoutRedirect({
-          account: account || undefined,
-        });
-      } else if (user?.provider === 'google') {
-        // Google logout - just clear local state
-        // The user will need to re-authenticate next time
-        setUser(null);
-        localStorage.removeItem('access_token');
-      }
-      
-      setUser(null);
-    } catch (err: any) {
-      console.error('Logout error:', err);
-      setError(err.message || 'Logout failed');
-    }
-  }, [user]);
-
-  /**
-   * Get Access Token
-   */
-  const getAccessToken = useCallback(async (): Promise<string | null> => {
-    if (!user) return null;
-
-    try {
-      if (user.provider === 'microsoft' && msalInstance) {
-        const account = msalInstance.getActiveAccount();
-        if (!account) return null;
-
-        try {
-          const response = await msalInstance.acquireTokenSilent({
-            ...apiRequest,
-            account: account,
-          });
-          return response.accessToken;
-        } catch (err) {
-          if (err instanceof InteractionRequiredAuthError) {
-            // Silent token acquisition failed, user needs to login again
-            const response = await msalInstance.acquireTokenPopup(apiRequest);
-            return response.accessToken;
-          }
-          throw err;
+      // Send token to backend for validation
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/azure/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ access_token: token }),
         }
-      } else if (user.provider === 'google') {
-        // Google tokens are short-lived, return the stored token
-        // In production, implement token refresh logic
-        return user.accessToken;
-      }
-      
-      return null;
-    } catch (err) {
-      console.error('Get access token error:', err);
-      return null;
-    }
-  }, [user]);
+      );
 
-  /**
-   * Clear Error
-   */
-  const clearError = useCallback(() => {
-    setError(null);
-  }, []);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Backend authentication failed:', errorData);
+        throw new Error(errorData.detail || 'Backend authentication failed');
+      }
+
+      const data = await response.json();
+      
+      const userData: User = {
+        id: loginResponse.account.localAccountId,
+        email: loginResponse.account.username,
+        name: loginResponse.account.name || loginResponse.account.username,
+        provider: 'azure',
+      };
+
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('access_token', data.access_token);
+    } catch (error) {
+      console.error('Microsoft login error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      // Initialize Google Sign-In
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      
+      if (!clientId) {
+        throw new Error('Google Client ID not configured');
+      }
+
+      // This will be handled by the Google Sign-In button component
+      // For now, throw an error to indicate it should be implemented in the component
+      throw new Error('Please use the Google Sign-In button component');
+    } catch (error) {
+      console.error('Google login error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      // Clear local storage
+      localStorage.removeItem('user');
+      localStorage.removeItem('access_token');
+
+      // Logout from MSAL if Microsoft user
+      if (user?.provider === 'azure' && msalInstance) {
+        const accounts = msalInstance.getAllAccounts();
+        if (accounts.length > 0) {
+          await msalInstance.logoutPopup({
+            account: accounts[0],
+          });
+        }
+      }
+
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const value: AuthContextType = {
     user,
     isAuthenticated: !!user,
     isLoading,
-    error,
-    azureAuthEnabled,
-    googleAuthEnabled,
     login,
-    loginPopup,
+    loginWithMicrosoft,
     loginWithGoogle,
     logout,
-    getAccessToken,
-    clearError,
+    azureAuthEnabled,
+    googleAuthEnabled,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-/**
- * Hook to use Auth Context
- */
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };
 
 export default AuthContext;

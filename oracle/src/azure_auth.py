@@ -94,20 +94,36 @@ class AzureAuthService:
             # Get the signing key from Microsoft's JWKS endpoint
             signing_key = self.jwks_client.get_signing_key_from_jwt(token)
 
+            # For External ID, the issuer might have trailing slash variations
+            # Accept both with and without trailing slash
+            issuer_options = [
+                self.token_issuer,
+                self.token_issuer.rstrip('/'),
+                f"{self.token_issuer}/",
+            ]
+
             # Decode and validate the token
             payload = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
                 audience=self.client_id,
-                issuer=self.token_issuer,
                 options={
                     "verify_signature": True,
                     "verify_exp": True,
                     "verify_aud": True,
-                    "verify_iss": True,
+                    "verify_iss": False,  # We'll verify issuer manually below
                 },
             )
+
+            # Manually verify issuer (allow variations)
+            token_issuer = payload.get("iss", "")
+            if not any(token_issuer == iss or token_issuer == iss.rstrip('/') for iss in issuer_options):
+                logger.error(f"Token issuer mismatch. Expected one of {issuer_options}, got {token_issuer}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid token issuer: {token_issuer}",
+                )
 
             # Extract user information
             user_info = {

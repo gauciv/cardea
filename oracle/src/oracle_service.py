@@ -204,6 +204,94 @@ def create_app() -> FastAPI:
                 detail="Internal server error during OAuth validation"
             )
     
+    # Azure AD / Microsoft Entra authentication endpoint
+    class AzureLoginRequest(BaseModel):
+        access_token: str
+    
+    @app.post("/api/auth/azure/login", response_model=dict)
+    async def azure_login(azure_data: AzureLoginRequest):
+        """
+        Validate Microsoft Azure AD / Entra ID access token and create session
+        """
+        try:
+            if not azure_auth_service or not azure_auth_service.is_enabled():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Azure authentication is not configured or unavailable"
+                )
+            
+            # Validate the Azure token
+            user_info = azure_auth_service.validate_token(azure_data.access_token)
+            
+            # Create JWT token for our API
+            access_token = create_access_token(
+                data={"sub": user_info.get("email"), "provider": "azure"}
+            )
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "id": user_info.get("user_id"),
+                    "email": user_info.get("email"),
+                    "full_name": user_info.get("name"),
+                    "provider": "azure"
+                }
+            }
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Azure login error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Azure authentication failed: {str(e)}"
+            )
+    
+    # Google OAuth authentication endpoint
+    class GoogleLoginRequest(BaseModel):
+        credential: str  # ID token from Google Sign-In
+    
+    @app.post("/api/auth/google/login", response_model=dict)
+    async def google_login(google_data: GoogleLoginRequest):
+        """
+        Validate Google ID token and create session
+        """
+        try:
+            if not google_auth_service or not google_auth_service.is_enabled():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Google authentication is not configured or unavailable"
+                )
+            
+            # Validate the Google ID token
+            user_info = google_auth_service.validate_token(google_data.credential)
+            
+            # Create JWT token for our API
+            access_token = create_access_token(
+                data={"sub": user_info.get("email"), "provider": "google"}
+            )
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "id": user_info.get("user_id"),
+                    "email": user_info.get("email"),
+                    "full_name": user_info.get("name"),
+                    "provider": "google"
+                }
+            }
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Google login error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Google authentication failed: {str(e)}"
+            )
+    
     @app.get("/health", response_model=HealthResponse)
     async def health_check():
         try:
