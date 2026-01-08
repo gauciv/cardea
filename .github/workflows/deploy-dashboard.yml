@@ -28,7 +28,6 @@ jobs:
         working-directory: dashboard
         run: |
           npm run build
-          cp staticwebapp.config.json dist/
         env:
           VITE_ORACLE_URL: ${{ vars.ORACLE_URL }}
 
