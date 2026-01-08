@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom'; // Added this
 import { 
   Shield, Activity, Zap, Server, AlertCircle, AlertTriangle, Info, XCircle,
   Sparkles, CheckCircle2, WifiOff, RefreshCw, Eye, BarChart3
 } from 'lucide-react';
 import type { AnalyticsResponse, Alert, AIInsight } from './types'; 
 import { ThreatOverview } from './components/ThreatOverview';
-import LoginPage from './components/LoginPage';
+// REMOVED: import LoginPage from './components/LoginPage'; 
 import { UserMenu } from './components/UserMenu';
 import { useAuth } from './lib/useAuth';
 
@@ -42,7 +43,6 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 's
   return (
     <div className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}>
       <div className="flex items-start gap-3">
-        {/* FIX: flex-shrink-0 -> shrink-0 */}
         <Icon className={`w-5 h-5 ${config.iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
@@ -56,7 +56,7 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 's
   );
 };
 
-// AI Insight Card Component - Consumer-friendly, conversational, actionable
+// AI Insight Card Component
 const AIInsightCard: React.FC<{ 
   insight: AIInsight | null | undefined; 
   isLoading: boolean;
@@ -66,7 +66,6 @@ const AIInsightCard: React.FC<{
   const [showTechnical, setShowTechnical] = useState(false);
   const [activeButton, setActiveButton] = useState<string | null>(null);
   
-  // Handle button click with loading state
   const handleAction = async (decision: { id: string; action_type: string; target?: string; label?: string }) => {
     setActiveButton(decision.id);
     try {
@@ -76,21 +75,15 @@ const AIInsightCard: React.FC<{
     }
   };
   
-  // Button style based on severity
   const getButtonStyle = (severity: string) => {
     switch (severity) {
-      case 'danger':
-        return 'bg-red-600 hover:bg-red-500 text-white border-red-500';
-      case 'warning':
-        return 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500';
-      case 'success':
-        return 'bg-green-600 hover:bg-green-500 text-white border-green-500';
-      default:
-        return 'bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600';
+      case 'danger': return 'bg-red-600 hover:bg-red-500 text-white border-red-500';
+      case 'warning': return 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500';
+      case 'success': return 'bg-green-600 hover:bg-green-500 text-white border-green-500';
+      default: return 'bg-slate-700 hover:bg-slate-600 text-slate-200 border-slate-600';
     }
   };
 
-  // Status color based on emoji
   const getStatusGradient = (emoji: string) => {
     if (emoji === '🔴' || emoji === '🚨') return 'from-red-950/40 via-slate-900/60 to-slate-900/80 border-red-900/50';
     if (emoji === '🟠') return 'from-orange-950/40 via-slate-900/60 to-slate-900/80 border-orange-900/50';
@@ -98,7 +91,6 @@ const AIInsightCard: React.FC<{
     return 'from-green-950/30 via-slate-900/60 to-cyan-950/20 border-green-900/40';
   };
 
-  // Typing indicator component
   const TypingIndicator = () => (
     <div className="flex items-center gap-1">
       <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -109,7 +101,6 @@ const AIInsightCard: React.FC<{
 
   if (isLoading) {
     return (
-      /* FIX: bg-gradient-to-br -> bg-linear-to-br */
       <div className="bg-linear-to-br from-slate-900/80 via-slate-900/60 to-cyan-950/30 border border-slate-800 rounded-2xl p-8">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2.5 bg-cyan-900/30 rounded-xl">
@@ -134,7 +125,6 @@ const AIInsightCard: React.FC<{
 
   if (!insight) {
     return (
-      /* FIX: bg-gradient-to-br -> bg-linear-to-br */
       <div className="bg-linear-to-br from-slate-900/80 via-slate-900/60 to-slate-800/30 border border-slate-800 rounded-2xl p-8">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 bg-slate-800/50 rounded-xl">
@@ -152,7 +142,6 @@ const AIInsightCard: React.FC<{
     );
   }
 
-  // Handle new format with fallback to legacy
   const greeting = insight.greeting || '';
   const statusEmoji = insight.status_emoji || '🟢';
   const headline = insight.headline || insight.summary || 'Security status';
@@ -162,9 +151,7 @@ const AIInsightCard: React.FC<{
   const technicalSummary = insight.technical_summary;
 
   return (
-    /* FIX: bg-gradient-to-br -> bg-linear-to-br */
     <div className={`bg-linear-to-br ${getStatusGradient(statusEmoji)} border rounded-2xl p-8 relative overflow-hidden`}>
-      {/* Greeting + Status */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{statusEmoji}</span>
@@ -175,23 +162,16 @@ const AIInsightCard: React.FC<{
         </span>
       </div>
 
-      {/* Headline - The main message */}
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-slate-100 leading-relaxed">
-          {headline}
-        </h2>
+        <h2 className="text-2xl font-semibold text-slate-100 leading-relaxed">{headline}</h2>
       </div>
 
-      {/* Story - Natural language explanation */}
       {story && (
         <div className="mb-6">
-          <p className="text-base text-slate-300 leading-relaxed">
-            {story}
-          </p>
+          <p className="text-base text-slate-300 leading-relaxed">{story}</p>
         </div>
       )}
 
-      {/* What Cardea Already Did */}
       {actionsTaken.length > 0 && (
         <div className="mb-6 bg-slate-900/40 rounded-xl p-4 border border-slate-800/50">
           <div className="flex items-center gap-2 mb-3">
@@ -201,7 +181,6 @@ const AIInsightCard: React.FC<{
           <ul className="space-y-1.5">
             {actionsTaken.map((action, index) => (
               <li key={index} className="flex items-center gap-2 text-sm text-slate-300">
-                {/* FIX: flex-shrink-0 -> shrink-0 */}
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full shrink-0" />
                 {action}
               </li>
@@ -210,7 +189,6 @@ const AIInsightCard: React.FC<{
         </div>
       )}
 
-      {/* Action Buttons - The key differentiator */}
       {decisions.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-3">
@@ -228,9 +206,7 @@ const AIInsightCard: React.FC<{
                   className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 border ${getButtonStyle(decision.severity)} ${isExecuting ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105 active:scale-95'} shadow-lg flex items-center gap-2`}
                   title={decision.description}
                 >
-                  {activeButton === decision.id && (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  )}
+                  {activeButton === decision.id && <RefreshCw className="w-4 h-4 animate-spin" />}
                   {decision.label}
                 </button>
               );
@@ -239,7 +215,6 @@ const AIInsightCard: React.FC<{
         </div>
       )}
 
-      {/* Technical Details (Expandable) */}
       {technicalSummary && (
         <div className="mt-4 pt-4 border-t border-slate-800/50">
           <button 
@@ -257,7 +232,6 @@ const AIInsightCard: React.FC<{
         </div>
       )}
 
-      {/* Footer with AI/Rule badge */}
       <div className="mt-4 pt-4 border-t border-slate-800/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {insight.ai_powered ? (
@@ -280,9 +254,7 @@ const AIInsightCard: React.FC<{
 
 // Empty State Component
 const EmptyState: React.FC<{ title: string; description: string; icon?: React.ElementType }> = ({ 
-  title, 
-  description, 
-  icon: Icon = AlertCircle 
+  title, description, icon: Icon = AlertCircle 
 }) => (
   <div className="flex flex-col items-center justify-center py-16 px-8">
     <div className="p-4 bg-slate-900/50 rounded-2xl mb-4">
@@ -317,9 +289,9 @@ const ConnectionStatus: React.FC<{ isConnected: boolean; isRetrying: boolean }> 
 );
 
 const App: React.FC = () => {
-  // Authentication state
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  
+  const navigate = useNavigate(); // Hook for redirection
+
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -327,18 +299,22 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showToast, setShowToast] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
-  
-  // Toast state for action feedback
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
+
+  // REDIRECT LOGIC: If done loading and not authenticated, go to login
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/login');
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   const fetchData = useCallback(async () => {
-    // Don't fetch if not authenticated
     if (!isAuthenticated) return;
     
     try {
-      // Use 'today' time range to only show today's events
       const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics?time_range=today`, {
-        timeout: 10000, // 10 second timeout
+        timeout: 10000, 
       });
       setData(res.data);
       setError(null);
@@ -350,8 +326,6 @@ const App: React.FC = () => {
       console.error("Oracle API Error:", err);
       setIsConnected(false);
       setRetryCount(prev => prev + 1);
-      
-      // Only show toast on first few failures, then just silently retry
       if (retryCount < 3) {
         setError("Unable to connect to Cardea Oracle backend");
         setShowToast(true);
@@ -369,41 +343,22 @@ const App: React.FC = () => {
     }
   }, [fetchData, isAuthenticated]);
 
-  // Calculate severity stats for display
-  const severityStats = data?.alerts_by_severity || {};
-  const criticalCount = severityStats['critical'] || 0;
-  const highCount = severityStats['high'] || 0;
-
-  // View mode: 'simple' (default) or 'detailed'
-  // Simple = AI insights + basic status only (for non-technical users)
-  // Detailed = Full graphs, tables, technical data
-  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
-
-  // Handle security action decisions - REAL API CALLS
   const handleSecurityAction = useCallback(async (action: { id: string; action_type: string; target?: string }) => {
-    console.log('🎯 Executing security action:', action);
-    
-    // Don't execute 'expand' actions - those are handled in the component
     if (action.action_type === 'expand') return;
-    
     try {
       const res = await axios.post(`${ORACLE_URL}/api/actions/execute`, {
         action_id: action.id,
         action_type: action.action_type,
         target: action.target,
-        duration_minutes: 60  // Default 1 hour
+        duration_minutes: 60
       }, { timeout: 10000 });
       
       if (res.data.success) {
-        // Show success toast instead of browser alert
         setActionToast({ message: res.data.message, type: 'success' });
-        
-        // Refresh data immediately
         await fetchData();
       } else {
         setActionToast({ message: `Action failed: ${res.data.message}`, type: 'error' });
       }
-    // FIX: Removed ': any' to satisfy linting. Using strict type check for error handling.
     } catch (err) {
       console.error('Action execution failed:', err);
       let errorMessage = 'Unknown error';
@@ -412,15 +367,15 @@ const App: React.FC = () => {
       } else if (err instanceof Error) {
         errorMessage = err.message;
       }
-
-      setActionToast({ 
-        message: `Failed to execute action: ${errorMessage}`, 
-        type: 'error' 
-      });
+      setActionToast({ message: `Failed to execute action: ${errorMessage}`, type: 'error' });
     }
   }, [fetchData]);
 
-  // Show loading state while checking auth
+  const severityStats = data?.alerts_by_severity || {};
+  const criticalCount = severityStats['critical'] || 0;
+  const highCount = severityStats['high'] || 0;
+
+  // Render loading state while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -432,30 +387,13 @@ const App: React.FC = () => {
     );
   }
 
-  // Show login page if not authenticated
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+  // If not authenticated, we return null because the useEffect above handles the redirect
+  if (!isAuthenticated) return null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
-      {/* Error Toast Notification */}
-      {showToast && error && (
-        <Toast 
-          message={error} 
-          type="error" 
-          onDismiss={() => setShowToast(false)} 
-        />
-      )}
-      
-      {/* Action Feedback Toast */}
-      {actionToast && (
-        <Toast 
-          message={actionToast.message} 
-          type={actionToast.type} 
-          onDismiss={() => setActionToast(null)} 
-        />
-      )}
+      {showToast && error && <Toast message={error} type="error" onDismiss={() => setShowToast(false)} />}
+      {actionToast && <Toast message={actionToast.message} type={actionToast.type} onDismiss={() => setActionToast(null)} />}
 
       <header className="border-b border-slate-900 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -466,21 +404,14 @@ const App: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
             <button
               onClick={() => setViewMode(viewMode === 'simple' ? 'detailed' : 'simple')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                viewMode === 'detailed'
-                  ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50'
-                  : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
+                viewMode === 'detailed' ? 'bg-cyan-900/40 text-cyan-400 border border-cyan-800/50' : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
               }`}
               title={viewMode === 'simple' ? 'Show technical details' : 'Hide technical details'}
             >
-              {viewMode === 'detailed' ? (
-                <><BarChart3 className="w-3.5 h-3.5" /> Technical View</>
-              ) : (
-                <><Eye className="w-3.5 h-3.5" /> Simple View</>
-              )}
+              {viewMode === 'detailed' ? <><BarChart3 className="w-3.5 h-3.5" /> Technical View</> : <><Eye className="w-3.5 h-3.5" /> Simple View</>}
             </button>
             
             <div className="flex items-center gap-6 text-[10px] font-bold text-slate-500 tracking-widest uppercase">
@@ -492,63 +423,40 @@ const App: React.FC = () => {
             )}
             <ConnectionStatus isConnected={isConnected} isRetrying={!isConnected && retryCount > 0} />
             {lastUpdate && isConnected && (
-              <span className="text-slate-600">
-                Updated: {lastUpdate.toLocaleTimeString([], { hour12: false })}
-              </span>
+              <span className="text-slate-600">Updated: {lastUpdate.toLocaleTimeString([], { hour12: false })}</span>
             )}
             </div>
             
-            {/* User Menu */}
             {user && <UserMenu user={user} />}
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-6">
-        {/* AI INSIGHT CARD - Always visible, this is the main interface */}
-        <AIInsightCard 
-          insight={data?.ai_insight} 
-          isLoading={isLoading && !data} 
-          onAction={handleSecurityAction}
-        />
+        <AIInsightCard insight={data?.ai_insight} isLoading={isLoading && !data} onAction={handleSecurityAction} />
 
-        {/* SIMPLE MODE: Just show network health summary */}
         {viewMode === 'simple' && isConnected && data && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Network Status Card */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  criticalCount > 0 ? 'bg-red-500 animate-pulse' :
-                  highCount > 0 ? 'bg-orange-500' : 'bg-green-500'
-                }`} />
+                <div className={`w-2 h-2 rounded-full ${criticalCount > 0 ? 'bg-red-500 animate-pulse' : highCount > 0 ? 'bg-orange-500' : 'bg-green-500'}`} />
                 <span className="text-xs font-medium text-slate-400">Network Status</span>
               </div>
-              <p className={`text-lg font-semibold ${
-                criticalCount > 0 ? 'text-red-400' :
-                highCount > 0 ? 'text-orange-400' : 'text-green-400'
-              }`}>
-                {criticalCount > 0 ? 'Needs Attention' :
-                 highCount > 0 ? 'Monitoring' : 'All Clear'}
+              <p className={`text-lg font-semibold ${criticalCount > 0 ? 'text-red-400' : highCount > 0 ? 'text-orange-400' : 'text-green-400'}`}>
+                {criticalCount > 0 ? 'Needs Attention' : highCount > 0 ? 'Monitoring' : 'All Clear'}
               </p>
             </div>
 
-            {/* Risk Level */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="w-3 h-3 text-cyan-500" />
                 <span className="text-xs font-medium text-slate-400">Risk Level</span>
               </div>
-              <p className={`text-lg font-semibold ${
-                (data?.risk_score || 0) >= 0.7 ? 'text-red-400' :
-                (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'
-              }`}>
-                {(data?.risk_score || 0) >= 0.7 ? 'High' :
-                 (data?.risk_score || 0) >= 0.4 ? 'Medium' : 'Low'}
+              <p className={`text-lg font-semibold ${(data?.risk_score || 0) >= 0.7 ? 'text-red-400' : (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'}`}>
+                {(data?.risk_score || 0) >= 0.7 ? 'High' : (data?.risk_score || 0) >= 0.4 ? 'Medium' : 'Low'}
               </p>
             </div>
 
-            {/* Events Today */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Activity className="w-3 h-3 text-purple-500" />
@@ -557,7 +465,6 @@ const App: React.FC = () => {
               <p className="text-lg font-semibold text-slate-200">{data.total_alerts || 0}</p>
             </div>
 
-            {/* Protection Status */}
             <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <Shield className="w-3 h-3 text-green-500" />
@@ -568,16 +475,11 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* DETAILED MODE: Show all technical information */}
         {viewMode === 'detailed' && (
           <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <ThreatOverview 
-                  alerts={data?.alerts || []} 
-                  severityStats={severityStats}
-                  isConnected={isConnected}
-                />
+                <ThreatOverview alerts={data?.alerts || []} severityStats={severityStats} isConnected={isConnected} />
               </div>
               
               <div className="flex flex-col gap-6">
@@ -591,15 +493,10 @@ const App: React.FC = () => {
                   </div>
                   {isConnected && data ? (
                     <>
-                      <p className={`text-5xl font-extralight relative z-10 ${
-                        (data?.risk_score || 0) >= 0.7 ? 'text-red-400' : 
-                        (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'
-                      }`}>
+                      <p className={`text-5xl font-extralight relative z-10 ${(data?.risk_score || 0) >= 0.7 ? 'text-red-400' : (data?.risk_score || 0) >= 0.4 ? 'text-yellow-400' : 'text-cyan-400'}`}>
                         {((data?.risk_score || 0) * 100).toFixed(1)}%
                       </p>
-                      <p className="text-[10px] text-slate-600 mt-4 leading-relaxed font-medium uppercase tracking-tighter">
-                        AI-Powered Threat Analysis
-                      </p>
+                      <p className="text-[10px] text-slate-600 mt-4 leading-relaxed font-medium uppercase tracking-tighter">AI-Powered Threat Analysis</p>
                     </>
                   ) : (
                     <p className="text-5xl font-extralight text-slate-700 relative z-10">—</p>
@@ -614,8 +511,6 @@ const App: React.FC = () => {
                   {isConnected && data ? (
                     <>
                       <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
-                      
-                      {/* Severity Breakdown */}
                       {Object.keys(severityStats).length > 0 && (
                         <div className="flex gap-3 mt-4">
                           {Object.entries(severityStats).map(([severity, count]) => {
@@ -644,12 +539,8 @@ const App: React.FC = () => {
                     <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Today's Security Events</h2>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
-                      Showing latest 50 alerts
-                  </div>
-                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">
-                      Updates: Auto (5s)
-                  </div>
+                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">Showing latest 50 alerts</div>
+                  <div className="text-[8px] font-mono text-slate-600 uppercase tracking-widest">Updates: Auto (5s)</div>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -664,15 +555,10 @@ const App: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-900/50">
-                    {/* Handle disconnected state */}
                     {!isConnected ? (
                       <tr>
                         <td colSpan={5} className="p-16 text-center">
-                          <EmptyState 
-                            icon={WifiOff}
-                            title="Oracle Backend Offline"
-                            description="Unable to connect to the Cardea Oracle backend. The system will automatically retry the connection. Check that the Oracle service is running."
-                          />
+                          <EmptyState icon={WifiOff} title="Oracle Backend Offline" description="Unable to connect to the Cardea Oracle backend. The system will automatically retry the connection. Check that the Oracle service is running." />
                         </td>
                       </tr>
                     ) : data?.alerts && data.alerts.length > 0 ? (
@@ -690,20 +576,13 @@ const App: React.FC = () => {
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 italic max-w-md">"{alert.description}"</p>
                           </td>
-                          <td className="px-6 py-5 text-xs font-mono text-slate-400">
-                            {alert.source}
-                          </td>
+                          <td className="px-6 py-5 text-xs font-mono text-slate-400">{alert.source}</td>
                           <td className="px-6 py-5 text-center">
                             {alert.threat_score !== undefined && alert.threat_score !== null ? (
-                              <span className={`text-[10px] font-bold tabular-nums ${
-                                alert.threat_score >= 0.7 ? 'text-red-500' : 
-                                alert.threat_score >= 0.4 ? 'text-yellow-500' : 'text-green-500'
-                              }`}>
+                              <span className={`text-[10px] font-bold tabular-nums ${alert.threat_score >= 0.7 ? 'text-red-500' : alert.threat_score >= 0.4 ? 'text-yellow-500' : 'text-green-500'}`}>
                                 {(alert.threat_score * 100).toFixed(0)}%
                               </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-600">—</span>
-                            )}
+                            ) : (<span className="text-[10px] text-slate-600">—</span>)}
                           </td>
                           <td className="px-6 py-5 text-right">
                             <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-2.5 py-1 rounded border tracking-tighter ${config.bg} ${config.color}`}>
@@ -716,11 +595,7 @@ const App: React.FC = () => {
                     ) : (
                       <tr>
                         <td colSpan={5} className="p-16 text-center">
-                          <EmptyState 
-                            icon={Shield}
-                            title="No Active Threats"
-                            description="No tactical anomalies detected in the current monitoring buffer. The network appears secure."
-                          />
+                          <EmptyState icon={Shield} title="No Active Threats" description="No tactical anomalies detected in the current monitoring buffer. The network appears secure." />
                         </td>
                       </tr>
                     )}
