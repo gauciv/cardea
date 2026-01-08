@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom'; // Added this
+import { useNavigate } from 'react-router-dom';
 import { 
   Shield, Activity, Zap, Server, AlertCircle, AlertTriangle, Info, XCircle,
   Sparkles, CheckCircle2, WifiOff, RefreshCw, Eye, BarChart3
 } from 'lucide-react';
 import type { AnalyticsResponse, Alert, AIInsight } from './types'; 
 import { ThreatOverview } from './components/ThreatOverview';
-// REMOVED: import LoginPage from './components/LoginPage'; 
 import { UserMenu } from './components/UserMenu';
 import { useAuth } from './lib/useAuth';
 
@@ -371,7 +370,8 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  const severityStats = data?.alerts_by_severity || {} as Record<string, number>;
+  // FIX: Force type annotation on the variable
+  const severityStats: Record<string, number> = data?.alerts_by_severity || {};
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 

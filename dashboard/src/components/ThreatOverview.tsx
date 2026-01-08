@@ -39,6 +39,9 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
   severityStats, 
   isConnected 
 }) => {
+  // FIX: Create a strictly typed local reference to prevent 'never' inference errors
+  const safeSeverityStats = (severityStats || {}) as Record<string, number>;
+
   // Calculate stats from alerts
   const stats = useMemo(() => {
     if (!alerts || alerts.length === 0) {
@@ -286,9 +289,9 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             <span>Severity Distribution</span>
           </div>
           <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-800">
-            {/* FIX: Added 'as Record<string, number>' to suppress inference error */}
-            {Object.entries(severityStats as Record<string, number>).map(([severity, count]) => {
-              const total = Object.values(severityStats).reduce((a, b) => a + b, 0);
+            {/* FIX: Use safeSeverityStats */}
+            {Object.entries(safeSeverityStats).map(([severity, count]) => {
+              const total = Object.values(safeSeverityStats).reduce((a, b) => a + b, 0);
               const percentage = total > 0 ? (count / total) * 100 : 0;
               if (percentage === 0) return null;
               return (
@@ -302,8 +305,8 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             })}
           </div>
           <div className="flex justify-between text-[8px] text-slate-600 uppercase">
-            {/* FIX: Added 'as Record<string, number>' to suppress inference error */}
-            {Object.entries(severityStats as Record<string, number>).map(([severity, count]) => (
+            {/* FIX: Use safeSeverityStats */}
+            {Object.entries(safeSeverityStats).map(([severity, count]) => (
               <span key={severity} className="flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityColors[severity]}`} />
                 {severity}: {count}
