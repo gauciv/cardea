@@ -475,49 +475,10 @@ const App: React.FC = () => {
   const criticalCount = severityStats["critical"] || 0;
   const highCount = severityStats["high"] || 0;
 
-  // Dynamic tab title based on connection state and alerts
+  // Set static tab title for dashboard endpoint
   useEffect(() => {
-    if (!isAuthenticated) {
-      document.title = "Cardea Security - Login";
-      return;
-    }
-
-    if (!isConnected) {
-      document.title = "⚠️ Cardea - Offline";
-      return;
-    }
-
-    const alertCount = data?.total_alerts || 0;
-    const criticalAlerts = severityStats["critical"] || 0;
-    const highAlerts = severityStats["high"] || 0;
-    const riskScore = data?.risk_score || 0;
-
-    // Priority: Critical alerts > High alerts > Risk level > Normal
-    if (criticalAlerts > 0) {
-      document.title = `🚨 ${criticalAlerts} Critical Alert${
-        criticalAlerts > 1 ? "s" : ""
-      } - Cardea`;
-    } else if (highAlerts > 0) {
-      document.title = `⚠️ ${highAlerts} High Alert${
-        highAlerts > 1 ? "s" : ""
-      } - Cardea`;
-    } else if (riskScore >= 0.7) {
-      document.title = "🔴 High Risk - Cardea";
-    } else if (riskScore >= 0.4) {
-      document.title = "🟡 Medium Risk - Cardea";
-    } else if (alertCount > 0) {
-      document.title = `🛡️ ${alertCount} Event${
-        alertCount > 1 ? "s" : ""
-      } - Cardea`;
-    } else {
-      document.title = "✅ All Clear - Cardea";
-    }
-  }, [isAuthenticated, isConnected, data, severityStats]);
-
-  // View mode: 'simple' (default) or 'detailed'
-  // Simple = AI insights + basic status only (for non-technical users)
-  // Detailed = Full graphs, tables, technical data
-  const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
+    document.title = "Cardea | Dashboard";
+  }, []);
 
   // Handle security action decisions - REAL API CALLS
   const handleSecurityAction = useCallback(
@@ -560,11 +521,6 @@ const App: React.FC = () => {
     },
     [fetchData]
   );
-
-  const severityStats =
-    data?.alerts_by_severity || ({} as Record<string, number>);
-  const criticalCount = severityStats["critical"] || 0;
-  const highCount = severityStats["high"] || 0;
 
   // Render loading state while checking auth
   if (authLoading) {
