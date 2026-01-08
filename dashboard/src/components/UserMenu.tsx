@@ -57,7 +57,8 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
   };
 
   const handleLogout = () => {
-    logout('/login');
+    // UPDATED: Redirect to Home Page ('/') instead of Login
+    logout('/');
   };
 
   return (
