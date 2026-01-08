@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import { Loader2, Shield, Sparkles, Mail, Lock, User, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 
 // API base URL
@@ -48,6 +49,7 @@ interface FormState {
 }
 
 const LoginPage: React.FC = () => {
+    const navigate = useNavigate(); // Hook for navigation
     const [mode, setMode] = useState<AuthMode>('login');
     const [isLoading, setIsLoading] = useState<string | null>(null);
     const [checkingAuth, setCheckingAuth] = useState(true);
@@ -86,7 +88,7 @@ const LoginPage: React.FC = () => {
                     if (response.ok) {
                         const data = await response.json();
                         if (data.clientPrincipal) {
-                            window.location.href = '/dashboard';
+                            navigate('/dashboard'); // Use navigate instead of window.location
                             return;
                         }
                     }
@@ -96,7 +98,7 @@ const LoginPage: React.FC = () => {
             } else {
                 const devAuth = localStorage.getItem('cardea_dev_auth');
                 if (devAuth === 'true') {
-                    window.location.href = '/dashboard';
+                    navigate('/dashboard'); // Use navigate instead of window.location
                     return;
                 }
             }
@@ -104,7 +106,7 @@ const LoginPage: React.FC = () => {
         };
         
         checkAuth();
-    }, [token]);
+    }, [token, navigate]);
 
     const handleVerifyEmail = async (verifyToken: string) => {
         setIsLoading('verify');
@@ -123,7 +125,7 @@ const LoginPage: React.FC = () => {
                 localStorage.setItem('cardea_dev_auth', 'true');
                 setSuccess('Email verified! Redirecting to dashboard...');
                 setTimeout(() => {
-                    window.location.href = '/dashboard';
+                    navigate('/dashboard');
                 }, 2000);
             } else {
                 setError(data.detail || 'Verification failed');
@@ -158,7 +160,7 @@ const LoginPage: React.FC = () => {
                 localStorage.setItem('cardea_auth_token', data.access_token);
                 localStorage.setItem('cardea_user', JSON.stringify(data.user));
                 localStorage.setItem('cardea_dev_auth', 'true');
-                window.location.href = '/dashboard';
+                navigate('/dashboard');
             } else {
                 setError(data.detail || 'Login failed');
             }
@@ -265,7 +267,7 @@ const LoginPage: React.FC = () => {
             if (response.ok) {
                 setSuccess('Password reset! You can now log in.');
                 setMode('login');
-                window.history.replaceState({}, '', '/login');
+                navigate('/login');
             } else {
                 setError(data.detail || 'Reset failed');
             }
@@ -280,6 +282,7 @@ const LoginPage: React.FC = () => {
         setIsLoading(provider);
         
         if (isAzureHosted()) {
+            // Social Login MUST use window.location because it leaves the app
             const redirectUrl = encodeURIComponent(window.location.origin + '/dashboard');
             window.location.href = `${AUTH_ENDPOINTS[provider]}?post_login_redirect_uri=${redirectUrl}`;
         } else {
@@ -291,7 +294,7 @@ const LoginPage: React.FC = () => {
                     email: `demo@${provider}.com`,
                     provider
                 }));
-                window.location.href = '/dashboard';
+                navigate('/dashboard');
             }, 1000);
         }
     };
@@ -319,7 +322,7 @@ const LoginPage: React.FC = () => {
             {/* Left Section - Login Form */}
             <div className="w-full lg:w-1/2 flex flex-col justify-between p-8 lg:p-16 xl:p-24">
                 {/* Logo */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
                     <Shield className="h-8 w-8 text-cyan-500" />
                     <span className="text-2xl font-bold text-white tracking-tight">
                         CARDEA <span className="text-slate-500 font-normal">Security</span>
