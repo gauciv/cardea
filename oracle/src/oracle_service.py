@@ -620,6 +620,9 @@ def create_app() -> FastAPI:
                     })
                 )
                 
+                # Clear the AI insight cache so it regenerates
+                await redis_client.delete("ai_insight:cache")
+                
                 logger.info(f"✓ Alerts dismissed by user")
                 
                 return SecurityActionResponse(
@@ -630,6 +633,33 @@ def create_app() -> FastAPI:
                     details={},
                     can_undo=False
                 )
+            
+            elif action_type == "clear_test_data":
+                # Actually delete all alerts from the database
+                try:
+                    async with get_db() as db:
+                        result = await db.execute(text("DELETE FROM alerts"))
+                        deleted_count = result.rowcount
+                        await db.commit()
+                    
+                    # Clear caches
+                    await redis_client.delete("ai_insight:cache")
+                    async for key in redis_client.scan_iter("dismissed:*"):
+                        await redis_client.delete(key)
+                    
+                    logger.warning(f"🗑️ User cleared {deleted_count} test alerts")
+                    
+                    return SecurityActionResponse(
+                        success=True,
+                        action_id=action_id,
+                        action_type=action_type,
+                        message=f"Done! I've cleared {deleted_count} test alerts. Your dashboard is now clean and ready for real security events.",
+                        details={"deleted_count": deleted_count},
+                        can_undo=False
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to clear test data: {e}")
+                    raise HTTPException(status_code=500, detail=str(e)) from e
             
             elif action_type == "allow_ip":
                 # Whitelist an IP address
@@ -1071,7 +1101,7 @@ async def _generate_ai_insight_internal(analytics_data: dict[str, Any], threat_a
                 ActionButton(
                     id="clear_test",
                     label="Clear test data",
-                    action_type="dismiss",
+                    action_type="clear_test_data",
                     severity="info",
                     description="Remove these test alerts from the dashboard"
                 )

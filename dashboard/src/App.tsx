@@ -19,13 +19,22 @@ const severityConfig = {
 };
 
 // Toast notification component
-const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
+const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 'success'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
   const config = {
     error: { bg: 'bg-red-950/90 border-red-800', icon: XCircle, iconColor: 'text-red-400' },
     warning: { bg: 'bg-yellow-950/90 border-yellow-800', icon: AlertTriangle, iconColor: 'text-yellow-400' },
     info: { bg: 'bg-cyan-950/90 border-cyan-800', icon: Info, iconColor: 'text-cyan-400' },
+    success: { bg: 'bg-green-950/90 border-green-800', icon: CheckCircle2, iconColor: 'text-green-400' },
   }[type];
   const Icon = config.icon;
+
+  // Auto-dismiss success toasts after 4 seconds
+  useEffect(() => {
+    if (type === 'success') {
+      const timer = setTimeout(onDismiss, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [type, onDismiss]);
 
   return (
     <div className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}>
@@ -33,7 +42,7 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info'; onD
         <Icon className={`w-5 h-5 ${config.iconColor} flex-shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
-          <p className="text-xs text-slate-400 mt-1">Automatic retry in progress...</p>
+          {type === 'error' && <p className="text-xs text-slate-400 mt-1">Automatic retry in progress...</p>}
         </div>
         <button onClick={onDismiss} className="text-slate-500 hover:text-slate-300 transition-colors">
           <XCircle className="w-4 h-4" />
@@ -47,9 +56,21 @@ const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info'; onD
 const AIInsightCard: React.FC<{ 
   insight: AIInsight | null | undefined; 
   isLoading: boolean;
+  isExecutingAction?: boolean;
   onAction?: (action: { id: string; action_type: string; target?: string }) => void;
-}> = ({ insight, isLoading, onAction }) => {
+}> = ({ insight, isLoading, isExecutingAction, onAction }) => {
   const [showTechnical, setShowTechnical] = useState(false);
+  const [activeButton, setActiveButton] = useState<string | null>(null);
+  
+  // Handle button click with loading state
+  const handleAction = async (decision: { id: string; action_type: string; target?: string; label?: string }) => {
+    setActiveButton(decision.id);
+    try {
+      await onAction?.(decision);
+    } finally {
+      setActiveButton(null);
+    }
+  };
   
   // Button style based on severity
   const getButtonStyle = (severity: string) => {
@@ -73,16 +94,34 @@ const AIInsightCard: React.FC<{
     return 'from-green-950/30 via-slate-900/60 to-cyan-950/20 border-green-900/40';
   };
 
+  // Typing indicator component
+  const TypingIndicator = () => (
+    <div className="flex items-center gap-1">
+      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+      <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-cyan-950/30 border border-slate-800 rounded-2xl p-8 animate-pulse">
+      <div className="bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-cyan-950/30 border border-slate-800 rounded-2xl p-8">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-full bg-slate-800" />
-          <div className="h-6 w-64 bg-slate-800 rounded" />
+          <div className="p-2.5 bg-cyan-900/30 rounded-xl">
+            <Sparkles className="w-6 h-6 text-cyan-400 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-200">Analyzing your network...</h2>
+            <div className="flex items-center gap-2 mt-1">
+              <TypingIndicator />
+              <span className="text-xs text-slate-500">AI is thinking</span>
+            </div>
+          </div>
         </div>
-        <div className="space-y-3">
-          <div className="h-4 bg-slate-800 rounded w-full" />
-          <div className="h-4 bg-slate-800 rounded w-5/6" />
+        <div className="space-y-3 animate-pulse">
+          <div className="h-4 bg-slate-800/50 rounded w-full" />
+          <div className="h-4 bg-slate-800/50 rounded w-5/6" />
+          <div className="h-4 bg-slate-800/50 rounded w-4/6" />
         </div>
       </div>
     );
@@ -171,16 +210,23 @@ const AIInsightCard: React.FC<{
             <h3 className="text-sm font-medium text-slate-400">What would you like me to do?</h3>
           </div>
           <div className="flex flex-wrap gap-3">
-            {decisions.map((decision) => (
-              <button
-                key={decision.id}
-                onClick={() => onAction?.({ id: decision.id, action_type: decision.action_type, target: decision.target })}
-                className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 border ${getButtonStyle(decision.severity)} hover:scale-105 active:scale-95 shadow-lg`}
-                title={decision.description}
-              >
-                {decision.label}
-              </button>
-            ))}
+            {decisions.map((decision) => {
+              const isExecuting = activeButton === decision.id || isExecutingAction;
+              return (
+                <button
+                  key={decision.id}
+                  onClick={() => handleAction(decision)}
+                  disabled={isExecuting}
+                  className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 border ${getButtonStyle(decision.severity)} ${isExecuting ? 'opacity-60 cursor-not-allowed' : 'hover:scale-105 active:scale-95'} shadow-lg flex items-center gap-2`}
+                  title={decision.description}
+                >
+                  {activeButton === decision.id && (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  )}
+                  {decision.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -270,6 +316,9 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showToast, setShowToast] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
+  
+  // Toast state for action feedback
+  const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -330,28 +379,40 @@ const App: React.FC = () => {
       }, { timeout: 10000 });
       
       if (res.data.success) {
-        // Show success message from the backend
-        alert(`✅ ${res.data.message}`);
+        // Show success toast instead of browser alert
+        setActionToast({ message: res.data.message, type: 'success' });
         
-        // Refresh data
+        // Refresh data immediately
         await fetchData();
       } else {
-        alert(`⚠️ Action failed: ${res.data.message}`);
+        setActionToast({ message: `Action failed: ${res.data.message}`, type: 'error' });
       }
     } catch (err: any) {
       console.error('Action execution failed:', err);
-      alert(`❌ Failed to execute action: ${err.response?.data?.detail || err.message}`);
+      setActionToast({ 
+        message: `Failed to execute action: ${err.response?.data?.detail || err.message}`, 
+        type: 'error' 
+      });
     }
   }, [fetchData]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
-      {/* Toast Notification */}
+      {/* Error Toast Notification */}
       {showToast && error && (
         <Toast 
           message={error} 
           type="error" 
           onDismiss={() => setShowToast(false)} 
+        />
+      )}
+      
+      {/* Action Feedback Toast */}
+      {actionToast && (
+        <Toast 
+          message={actionToast.message} 
+          type={actionToast.type} 
+          onDismiss={() => setActionToast(null)} 
         />
       )}
 
