@@ -82,6 +82,11 @@ resource "azurerm_postgresql_flexible_server" "oracle_db" {
   #   }
   # }
 
+  # Ignore zone changes - Azure assigns zone and we can't change it without HA
+  lifecycle {
+    ignore_changes = [zone]
+  }
+
   tags = var.tags
 }
 
