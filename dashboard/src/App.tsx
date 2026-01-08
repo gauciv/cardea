@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import type { AnalyticsResponse, Alert, AIInsight } from './types'; 
 import { ThreatOverview } from './components/ThreatOverview';
+import LoginPage from './components/LoginPage';
+import { UserMenu } from './components/UserMenu';
+import { useAuth } from './lib/useAuth';
 
 // Use environment variable or default to localhost for development
 const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
@@ -309,6 +312,9 @@ const ConnectionStatus: React.FC<{ isConnected: boolean; isRetrying: boolean }> 
 );
 
 const App: React.FC = () => {
+  // Authentication state
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -321,6 +327,9 @@ const App: React.FC = () => {
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const fetchData = useCallback(async () => {
+    // Don't fetch if not authenticated
+    if (!isAuthenticated) return;
+    
     try {
       // Use 'today' time range to only show today's events
       const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics?time_range=today`, {
@@ -345,13 +354,15 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [retryCount]);
+  }, [retryCount, isAuthenticated]);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    if (isAuthenticated) {
+      fetchData();
+      const interval = setInterval(fetchData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [fetchData, isAuthenticated]);
 
   // Calculate severity stats for display
   const severityStats = data?.alerts_by_severity || {};
@@ -395,6 +406,23 @@ const App: React.FC = () => {
       });
     }
   }, [fetchData]);
+
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Shield className="w-12 h-12 text-cyan-500 animate-pulse" />
+          <p className="text-slate-400 text-sm">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login page if not authenticated
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-cyan-500/30">
@@ -456,6 +484,9 @@ const App: React.FC = () => {
               </span>
             )}
             </div>
+            
+            {/* User Menu */}
+            {user && <UserMenu user={user} />}
           </div>
         </div>
       </header>

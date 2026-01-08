@@ -15,35 +15,38 @@ resource "azurerm_container_app_environment" "oracle_env" {
 }
 
 # Log Analytics for monitoring
+# BUDGET: Minimal retention to reduce costs
 resource "azurerm_log_analytics_workspace" "oracle_logs" {
   name                = "${var.project_name}-oracle-logs"
   location            = azurerm_resource_group.cardea_rg.location
   resource_group_name = azurerm_resource_group.cardea_rg.name
   sku                 = "PerGB2018"
-  retention_in_days   = var.is_production ? 90 : 30
+  retention_in_days   = 30  # Minimum retention to save costs
 
   tags = var.tags
 }
 
 # Azure Container Registry for Docker images
+# BUDGET: Use Basic tier for both dev and prod (~$5/month)
 resource "azurerm_container_registry" "acr" {
   name                = "${var.project_name}registry"  # Must be globally unique, alphanumeric only
   resource_group_name = azurerm_resource_group.cardea_rg.name
   location            = azurerm_resource_group.cardea_rg.location
-  sku                 = var.is_production ? "Standard" : "Basic"
-  admin_enabled       = true  # Simplified auth for dev
+  sku                 = "Basic"  # Basic is sufficient for Imagine Cup
+  admin_enabled       = true
 
   tags = var.tags
 }
 
 # Azure Cache for Redis (managed Redis)
+# BUDGET: Use Basic C0 for both dev and prod (~$16/month)
 resource "azurerm_redis_cache" "oracle_redis" {
   name                          = "${var.project_name}-oracle-redis"
   location                      = azurerm_resource_group.cardea_rg.location
   resource_group_name           = azurerm_resource_group.cardea_rg.name
   capacity                      = 0  # C0 = 250MB, smallest tier
   family                        = "C"
-  sku_name                      = var.is_production ? "Standard" : "Basic"
+  sku_name                      = "Basic"  # Basic is sufficient for demo
   non_ssl_port_enabled          = false
   minimum_tls_version           = "1.2"
   public_network_access_enabled = true
@@ -56,6 +59,7 @@ resource "azurerm_redis_cache" "oracle_redis" {
 }
 
 # Azure Database for PostgreSQL Flexible Server
+# BUDGET OPTIMIZED: Using Burstable tier even in prod for Imagine Cup
 resource "azurerm_postgresql_flexible_server" "oracle_db" {
   name                   = "${var.project_name}-oracle-db"
   resource_group_name    = azurerm_resource_group.cardea_rg.name
@@ -64,17 +68,19 @@ resource "azurerm_postgresql_flexible_server" "oracle_db" {
   administrator_login    = var.db_admin_username
   administrator_password = var.db_admin_password != null ? var.db_admin_password : random_password.db_password.result
   
-  # Burstable B1ms for dev, General Purpose for prod
-  sku_name   = var.is_production ? "GP_Standard_D2s_v3" : "B_Standard_B1ms"
-  storage_mb = var.is_production ? 65536 : 32768  # 64GB prod, 32GB dev
+  # BUDGET: Use Burstable B1ms for both dev and prod (~$13/month)
+  # For enterprise prod, use: GP_Standard_D2s_v3
+  sku_name   = "B_Standard_B1ms"
+  storage_mb = 32768  # 32GB is plenty for demo
 
-  # High availability only in production
-  dynamic "high_availability" {
-    for_each = var.is_production ? [1] : []
-    content {
-      mode = "ZoneRedundant"
-    }
-  }
+  # BUDGET: Disable HA for Imagine Cup (saves ~$13/month)
+  # For enterprise prod, enable zone redundant HA
+  # dynamic "high_availability" {
+  #   for_each = var.is_production ? [1] : []
+  #   content {
+  #     mode = "ZoneRedundant"
+  #   }
+  # }
 
   tags = var.tags
 }
@@ -158,14 +164,16 @@ resource "azurerm_container_app" "oracle" {
   }
 
   template {
-    min_replicas = var.is_production ? 2 : 0  # Scale to zero in dev
-    max_replicas = var.is_production ? 10 : 3
+    # BUDGET: Scale to zero when not in use (pay only when active)
+    min_replicas = 0
+    max_replicas = 3
 
     container {
       name   = "oracle"
       image  = "${azurerm_container_registry.acr.login_server}/${var.project_name}-oracle:${var.oracle_image_tag}"
-      cpu    = var.is_production ? 1.0 : 0.5
-      memory = var.is_production ? "2Gi" : "1Gi"
+      # BUDGET: Minimal resources (0.25 CPU, 0.5Gi RAM)
+      cpu    = 0.25
+      memory = "0.5Gi"
 
       env {
         name        = "DATABASE_URL"

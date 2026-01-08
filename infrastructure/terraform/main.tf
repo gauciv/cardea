@@ -76,33 +76,34 @@ resource "azurerm_cognitive_account" "openai" {
   tags = var.tags
 }
 
-# Model Deployment: GPT-4o-mini for dev, GPT-4o for prod
+# Model Deployment: GPT-4o-mini for cost efficiency
+# BUDGET: GPT-4o-mini is 10-20x cheaper than GPT-4o
 resource "azurerm_cognitive_deployment" "oracle_brain" {
   name                 = "oracle-brain"
   cognitive_account_id = azurerm_cognitive_account.openai.id
 
   model {
     format  = "OpenAI"
-    name    = var.is_production ? "gpt-4o" : "gpt-4o-mini"
-    version = var.is_production ? "2024-05-13" : "2024-07-18"
+    name    = "gpt-4o-mini"  # Always use mini for budget
+    version = "2024-07-18"
   }
 
   sku {
     name     = "Standard"
-    capacity = var.is_production ? 20 : 10
+    capacity = 10  # Low capacity is fine for demo
   }
 }
 
 # ============================================
 # Azure AI Search (for RAG)
 # ============================================
+# BUDGET: Free tier for both dev and prod (3 indexes, 50MB)
 resource "azurerm_search_service" "search" {
   name                = "${var.project_name}-search-${var.is_production ? "prod" : "dev"}"
   resource_group_name = azurerm_resource_group.cardea_rg.name
   location            = var.ai_location
 
-  # Free tier for dev, Basic for prod
-  sku = var.is_production ? "basic" : "free"
+  sku = "free"  # Free tier: 3 indexes, 50MB storage
 
   tags = var.tags
 }
