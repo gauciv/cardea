@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Shield, Sparkles, Mail, Lock, User, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 
 // API base URL
@@ -89,7 +90,7 @@ const LoginPage: React.FC = () => {
                             return;
                         }
                     }
-                } catch (error) {
+                } catch {
                     console.log('Not authenticated');
                 }
             } else {
@@ -128,7 +129,7 @@ const LoginPage: React.FC = () => {
                 setError(data.detail || 'Verification failed');
                 setCheckingAuth(false);
             }
-        } catch (err) {
+        } catch {
             setError('Network error. Please try again.');
             setCheckingAuth(false);
         } finally {
@@ -161,7 +162,7 @@ const LoginPage: React.FC = () => {
             } else {
                 setError(data.detail || 'Login failed');
             }
-        } catch (err) {
+        } catch  {
             setError('Network error. Please check your connection.');
         } finally {
             setIsLoading(null);
@@ -204,7 +205,7 @@ const LoginPage: React.FC = () => {
             } else {
                 setError(data.detail || 'Registration failed');
             }
-        } catch (err) {
+        } catch  {
             setError('Network error. Please try again.');
         } finally {
             setIsLoading(null);
@@ -226,7 +227,7 @@ const LoginPage: React.FC = () => {
             const data = await response.json();
             setSuccess(data.message || 'If an account exists, you will receive a reset email.');
             setMode('login');
-        } catch (err) {
+        } catch  {
             setError('Network error. Please try again.');
         } finally {
             setIsLoading(null);
@@ -268,7 +269,7 @@ const LoginPage: React.FC = () => {
             } else {
                 setError(data.detail || 'Reset failed');
             }
-        } catch (err) {
+        } catch  {
             setError('Network error. Please try again.');
         } finally {
             setIsLoading(null);
@@ -355,7 +356,7 @@ const LoginPage: React.FC = () => {
                     {/* Success Message */}
                     {success && (
                         <div className="flex items-center gap-3 bg-green-950/50 border border-green-800 rounded-lg p-4 text-green-300">
-                            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                            <CheckCircle2 className="w-5 h-5 shrink-0" />
                             <p className="text-sm">{success}</p>
                         </div>
                     )}
@@ -363,7 +364,7 @@ const LoginPage: React.FC = () => {
                     {/* Error Message */}
                     {error && (
                         <div className="flex items-center gap-3 bg-red-950/50 border border-red-800 rounded-lg p-4 text-red-300">
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <AlertCircle className="w-5 h-5 shrink-0" />
                             <p className="text-sm">{error}</p>
                         </div>
                     )}
@@ -412,7 +413,7 @@ const LoginPage: React.FC = () => {
                                 <button
                                     type="submit"
                                     disabled={isLoading === 'email'}
-                                    className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                    className="w-full py-3 bg-linear-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                                 >
                                     {isLoading === 'email' ? (
                                         <><Loader2 className="w-5 h-5 animate-spin" /> Signing in...</>
@@ -521,7 +522,7 @@ const LoginPage: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading === 'register'}
-                                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-linear-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                             >
                                 {isLoading === 'register' ? (
                                     <><Loader2 className="w-5 h-5 animate-spin" /> Creating account...</>
@@ -555,7 +556,7 @@ const LoginPage: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading === 'forgot'}
-                                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-linear-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                             >
                                 {isLoading === 'forgot' ? (
                                     <><Loader2 className="w-5 h-5 animate-spin" /> Sending...</>
@@ -601,7 +602,7 @@ const LoginPage: React.FC = () => {
                             <button
                                 type="submit"
                                 disabled={isLoading === 'reset'}
-                                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-linear-to-r from-cyan-600 to-cyan-500 text-white font-medium rounded-lg hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                             >
                                 {isLoading === 'reset' ? (
                                     <><Loader2 className="w-5 h-5 animate-spin" /> Resetting...</>
@@ -629,7 +630,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             {/* Right Section - Feature Showcase */}
-            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-slate-900 via-cyan-950/30 to-slate-900">
+            <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-linear-to-br from-slate-900 via-cyan-950/30 to-slate-900">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(34,211,238,0.1),transparent_50%)]" />
                 <div className="relative z-10 flex flex-col justify-center p-16 xl:p-24 space-y-8">
                     <div className="flex items-center gap-2 text-cyan-400">
