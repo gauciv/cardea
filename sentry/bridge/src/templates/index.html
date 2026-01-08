@@ -5,12 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cardea | Sentry Setup</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .progress-step-active { background-color: #06b6d4; color: white; }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.9); opacity: 1; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+        .pulse-ring::before {
+            content: '';
+            position: absolute;
+            inset: -8px;
+            border: 2px solid #06b6d4;
+            border-radius: 50%;
+            animation: pulse-ring 1.5s ease-out infinite;
+        }
     </style>
 </head>
+<body class="text-slate-900 min-h-screen flex flex-col items-center p-4">
+
+    <!-- ========== SETUP MODE OVERLAY ========== -->
+    <div id="setup-overlay" class="fixed inset-0 z-50 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 flex flex-col items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl">
+            <!-- Logo -->
+            <div class="relative w-20 h-20 bg-cyan-100 rounded-full flex items-center justify-center mx-auto pulse-ring">
+                <svg class="w-10 h-10 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                </svg>
+            </div>
+            
+            <div>
+                <h2 class="text-2xl font-bold text-slate-800">Connect Your Sentry</h2>
+                <p class="text-slate-500 text-sm mt-2">Scan this code with your phone or enter it in your Cardea Dashboard</p>
+            </div>
+            
+            <!-- QR Code Container -->
+            <div class="flex justify-center py-4">
+                <div id="qrcode" class="p-3 bg-white border-2 border-slate-100 rounded-xl shadow-inner"></div>
+            </div>
+
+            <!-- Pairing Code -->
+            <div class="space-y-2">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Entry Code</p>
+                <div class="text-4xl font-mono font-bold text-slate-800 tracking-[0.2em]" id="pairing-code">---</div>
+                <p class="text-xs text-slate-400">Expires in <span id="expires-in">15:00</span></p>
+            </div>
+
+            <!-- Status Indicator -->
+            <div class="pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-center gap-2 text-sm text-cyan-600">
+                    <div class="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
+                    <span id="setup-status-text">Waiting for connection...</span>
+                </div>
+            </div>
+            
+            <!-- Manual Link (for debugging) -->
+            <div class="text-xs text-slate-300">
+                <a href="#" id="setup-link" target="_blank" class="hover:text-cyan-500 transition-colors">Open setup link →</a>
+            </div>
+        </div>
+        
+        <p class="mt-8 text-slate-500 text-sm">
+            Cardea Sentry v1.0 • <span class="text-cyan-400">Setup Mode</span>
+        </p>
+    </div>
+    <!-- ========== END SETUP OVERLAY ========== -->
 <body class="text-slate-900 min-h-screen flex flex-col items-center p-4">
     <header class="w-full max-w-md flex justify-between items-center py-6">
         <div class="flex items-center gap-2">
@@ -67,20 +128,88 @@
     </footer>
 
     <script>
+        // ========== SETUP MODE LOGIC ==========
+        let qrCodeInstance = null;
+        let currentPairingCode = null;  // Track current code to detect changes
+        let isConfigured = false;
+        
+        async function checkSetupStatus() {
+            try {
+                const response = await fetch('/api/setup/status');
+                const data = await response.json();
+                
+                if (data.configured) {
+                    // Hide setup overlay, show main dashboard
+                    document.getElementById('setup-overlay').classList.add('hidden');
+                    isConfigured = true;
+                    document.getElementById('status-text').innerText = "Protection Active";
+                    document.getElementById('progress-bar').style.width = "100%";
+                    return true;
+                }
+                
+                // Show setup overlay
+                document.getElementById('setup-overlay').classList.remove('hidden');
+                
+                // Update pairing code display
+                document.getElementById('pairing-code').innerText = data.code || '---';
+                
+                // Update expiry timer
+                if (data.expires_in) {
+                    const mins = Math.floor(data.expires_in / 60);
+                    const secs = data.expires_in % 60;
+                    document.getElementById('expires-in').innerText = 
+                        `${mins}:${secs.toString().padStart(2, '0')}`;
+                }
+                
+                // Update setup link
+                document.getElementById('setup-link').href = data.setup_url || '#';
+                
+                // Generate/regenerate QR code when code changes
+                const qrDiv = document.getElementById('qrcode');
+                if (data.code && data.code !== currentPairingCode) {
+                    // Code changed - regenerate QR
+                    currentPairingCode = data.code;
+                    qrDiv.innerHTML = ''; // Clear previous QR
+                    qrCodeInstance = new QRCode(qrDiv, {
+                        text: data.setup_url,
+                        width: 180,
+                        height: 180,
+                        colorDark: "#0f172a",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                }
+                
+                return false;
+            } catch (e) {
+                console.error("Setup status check failed:", e);
+                return false;
+            }
+        }
+        
+        // Poll for setup status every 3 seconds
+        setInterval(checkSetupStatus, 3000);
+        checkSetupStatus(); // Initial check
+        
+        // ========== MAIN DASHBOARD LOGIC ==========
         function toggleAdvanced() {
             const view = document.getElementById('advanced-view');
             view.classList.toggle('hidden');
         }
 
-        // Simulate Status Updates
+        // Simulate Status Updates (only when configured)
         let scoreCount = 0;
         setInterval(() => {
+            if (!isConfigured) return; // Don't update if in setup mode
+            
             const score = (Math.random() * 0.1).toFixed(4);
             const logs = document.getElementById('logs');
-            const p = document.createElement('p');
-            p.innerText = `[TRAFFIC] Anomaly Score: ${score}`;
-            logs.appendChild(p);
-            logs.scrollTop = logs.scrollHeight;
+            if (logs) {
+                const p = document.createElement('p');
+                p.innerText = `[TRAFFIC] Anomaly Score: ${score}`;
+                logs.appendChild(p);
+                logs.scrollTop = logs.scrollHeight;
+            }
             
             scoreCount++;
             if (scoreCount > 10) {
