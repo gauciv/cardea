@@ -124,7 +124,7 @@ const LandingPage = () => {
         observer.disconnect();
       }
     };
-  }, [phase]); // Re-run when phase changes so Use Cases ref can be observed
+  }, [phase]);
 
   const useCaseTabs = [
     {
@@ -261,7 +261,7 @@ const LandingPage = () => {
 
   return (
     <div ref={containerRef}>
-      {/* Persistent Navigation - Sleek Modern Design */}
+      {/* Persistent Navigation */}
       <nav 
         className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-5 px-4 transition-all duration-700"
         style={{
