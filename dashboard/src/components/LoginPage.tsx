@@ -622,7 +622,6 @@ const LoginPage: React.FC = () => {
                         </div>
                     )}
                 </div>
-{/* mock */}
                 {/* Footer */}
                 <div className="text-center lg:text-left text-sm text-slate-500">
                     <p>© 2026 Cardea Security. Protected by AI.</p>
