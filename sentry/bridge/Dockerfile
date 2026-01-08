@@ -17,14 +17,14 @@ COPY requirements.txt .
 # Install Python dependencies (no build tools needed for these packages)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create necessary directories
-RUN mkdir -p /app/data /app/config
+# Create necessary directories (including bridge subdirectory for config persistence)
+RUN mkdir -p /app/data/bridge /app/config
 
 # Copy application code AFTER dependencies
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-# Create non-root user in single layer
+# Create non-root user and set ownership
 RUN useradd -r -s /bin/false bridge \
     && chown -R bridge:bridge /app
 
