@@ -6,9 +6,15 @@ import uuid
 import secrets
 import logging
 import traceback
+import os
 
 # Configure logger
 logger = logging.getLogger("cardea.oracle.devices")
+
+# ============ DEMO MODE CONFIGURATION ============
+# For the demo, we accept a hardcoded claim code instead of requiring pre-registration
+DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
+DEMO_CLAIM_CODE = "SN7-K2M"  # Must match the Sentry Bridge's code
 
 # Try-except block allows this to run if 'database' is a sibling or in src
 try:
@@ -92,13 +98,59 @@ async def register_device(req: DeviceRegisterRequest):
 async def claim_device(req: DeviceClaimRequest):
     """
     Called by the Dashboard user to link a device to their account.
+    
+    DEMO MODE: Accepts hardcoded "CARDEA" code and auto-creates a device.
+    PRODUCTION MODE: Requires device to be pre-registered with matching claim_token.
     """
     conn = await get_db_connection()
     try:
-        # Find device by claim token
+        # Normalize input code (strip whitespace, uppercase)
+        input_code = req.claim_token.strip().upper()
+        
+        # ============ DEMO MODE: Auto-create device with hardcoded code ============
+        if DEMO_MODE and input_code == DEMO_CLAIM_CODE:
+            logger.info(f"🎯 DEMO MODE: Accepting demo claim code '{input_code}'")
+            
+            # Check if a demo device already exists
+            existing_demo = await conn.fetchrow(
+                "SELECT id, api_key FROM devices WHERE hardware_id LIKE 'demo-%' AND status = 'online' LIMIT 1"
+            )
+            
+            if existing_demo and existing_demo["api_key"]:
+                # Return existing demo device's API key
+                logger.info(f"🔄 Returning existing demo device: {existing_demo['id']}")
+                return {
+                    "success": True,
+                    "device_id": str(existing_demo["id"]),
+                    "api_key": existing_demo["api_key"],
+                    "message": "Demo device already configured - returning existing API key"
+                }
+            
+            # Create a new demo device
+            new_id = str(uuid.uuid4())
+            hardware_id = f"demo-{secrets.token_hex(6)}"
+            api_key = f"sk-demo-{secrets.token_urlsafe(32)}"
+            
+            await conn.execute(
+                """
+                INSERT INTO devices (id, hardware_id, friendly_name, status, api_key, version, last_seen)
+                VALUES ($1, $2, $3, 'online', $4, '1.0.0', NOW())
+                """,
+                new_id, hardware_id, req.friendly_name or "Demo Sentry", api_key
+            )
+            
+            logger.info(f"🎉 DEMO: Created demo device {hardware_id}")
+            return {
+                "success": True,
+                "device_id": new_id,
+                "api_key": api_key,
+                "message": "Demo device created successfully"
+            }
+        
+        # ============ PRODUCTION MODE: Find device by claim token ============
         device = await conn.fetchrow(
             "SELECT id, hardware_id FROM devices WHERE claim_token = $1 AND status = 'unclaimed'",
-            req.claim_token
+            input_code
         )
         
         if not device:
@@ -107,7 +159,7 @@ async def claim_device(req: DeviceClaimRequest):
         # Generate a permanent API Key for the device
         api_key = f"sk-{secrets.token_urlsafe(32)}"
         
-        # FIXED: Update 'friendly_name' instead of 'name'
+        # Update device status and API key
         await conn.execute(
             """
             UPDATE devices 

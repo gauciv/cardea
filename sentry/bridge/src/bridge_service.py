@@ -40,6 +40,11 @@ ORACLE_URL = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000") # Base URL
 DATA_DIR = Path("/app/data")
 CONFIG_FILE = DATA_DIR / "sentry_config.json"
 
+# ============ DEMO MODE CONFIGURATION ============
+# For the demo, we use a hardcoded claim code instead of dynamic Oracle registration
+DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
+DEMO_CLAIM_CODE = "SN7-K2M"  # Realistic device pairing code format
+
 # --- PLATFORM DETECTION LOGIC (PRESERVED) ---
 
 class EnhancedPlatformDetector:
@@ -267,10 +272,14 @@ class BridgeService:
         
         # Setup Mode State
         self.is_setup_mode = self.api_key is None
-        self.claim_token = None # Will be populated by Oracle registration
+        self.claim_token = DEMO_CLAIM_CODE if DEMO_MODE else None  # Use hardcoded code for demo
+        self.connected_devices_count = 1 if not self.is_setup_mode else 0
         
         if self.is_setup_mode:
-            logger.warning(f"⚠️ SETUP MODE: Sentry {self.hardware_id} waiting for claim...")
+            if DEMO_MODE:
+                logger.warning(f"⚠️ DEMO SETUP MODE: Use code '{DEMO_CLAIM_CODE}' on Dashboard")
+            else:
+                logger.warning(f"⚠️ SETUP MODE: Sentry {self.hardware_id} waiting for claim...")
         else:
             logger.info(f"✅ Sentry Online: {self.sentry_id}")
             self.oracle_client.update_api_key(self.api_key)
@@ -372,6 +381,8 @@ class BridgeService:
             self.oracle_client.update_api_key(api_key)
             self.is_setup_mode = False
             self.claim_token = None
+            self.connected_devices_count = 1  # Mark as connected for demo
+            logger.info(f"🎉 Sentry configured successfully! Connected devices: 1")
             return True
         except Exception as e:
             logger.error(f"Config save failed: {e}")
@@ -380,13 +391,18 @@ class BridgeService:
     def get_setup_status(self) -> dict[str, Any]:
         """Return status for the Local UI"""
         if not self.is_setup_mode:
-            return {"configured": True, "sentry_id": self.sentry_id}
+            return {
+                "configured": True, 
+                "sentry_id": self.sentry_id,
+                "connected_devices": self.connected_devices_count
+            }
         
         return {
             "configured": False,
             "hardware_id": self.hardware_id,
-            "claim_token": self.claim_token or "Connecting...",
-            "oracle_url": ORACLE_URL
+            "claim_token": self.claim_token or (DEMO_CLAIM_CODE if DEMO_MODE else "Connecting..."),
+            "oracle_url": ORACLE_URL,
+            "demo_mode": DEMO_MODE
         }
         
     def _setup_data_paths(self):
@@ -499,13 +515,15 @@ zeek_notice_monitor = get_notice_monitor(handle_zeek_notice_alert)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"🌉 Bridge Service Online [ID: {bridge_service.hardware_id}]")
+    if DEMO_MODE:
+        logger.info(f"📋 DEMO MODE: Use pairing code '{DEMO_CLAIM_CODE}' on Dashboard")
     
     # Start Zeek notice monitoring
     notice_task = asyncio.create_task(zeek_notice_monitor.start())
     
-    # Start Registration Polling ONLY if in setup mode
+    # Start Registration Polling ONLY if in setup mode AND not in demo mode
     reg_task = None
-    if bridge_service.is_setup_mode:
+    if bridge_service.is_setup_mode and not DEMO_MODE:
         reg_task = asyncio.create_task(bridge_service._poll_registration_status())
     
     yield

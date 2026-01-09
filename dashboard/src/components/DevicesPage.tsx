@@ -137,20 +137,50 @@ export const DevicesPage = () => {
               <div key={i} className="h-48 bg-slate-900/50 rounded-xl animate-pulse border border-slate-800" />
             ))
           ) : devices.length === 0 ? (
-            <div className="col-span-full py-24 text-center bg-slate-900/20 rounded-2xl border border-slate-800 border-dashed">
-              <div className="w-20 h-20 bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Monitor className="w-10 h-10 text-slate-600" />
+            <div className="col-span-full py-16 text-center bg-gradient-to-br from-slate-900/40 to-cyan-950/20 rounded-2xl border border-slate-800 border-dashed relative overflow-hidden">
+              {/* Background decoration */}
+              <div className="absolute inset-0 opacity-5">
+                <div className="absolute top-10 left-10 w-32 h-32 border border-cyan-500 rounded-full" />
+                <div className="absolute bottom-10 right-10 w-48 h-48 border border-cyan-500 rounded-full" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-300">No Devices Connected</h3>
-              <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                Connect a Sentry device to start monitoring your network traffic in real-time.
-              </p>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="mt-8 px-8 py-3 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-full font-bold transition-colors border border-slate-700"
-              >
-                + Link a Device Now
-              </button>
+              
+              <div className="relative z-10">
+                <div className="w-24 h-24 bg-gradient-to-br from-cyan-500/20 to-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-cyan-500/20 shadow-lg shadow-cyan-500/10">
+                  <Monitor className="w-12 h-12 text-cyan-400" />
+                </div>
+                
+                <h3 className="text-3xl font-bold text-white mb-3">Connect Your First Sentry</h3>
+                <p className="text-slate-400 mt-2 max-w-lg mx-auto leading-relaxed">
+                  Your Cardea Sentry device is waiting to be paired. Enter the <span className="text-cyan-400 font-semibold">6-character pairing code</span> displayed on your Sentry's local portal to establish a secure connection.
+                </p>
+                
+                {/* Instructions */}
+                <div className="mt-8 max-w-md mx-auto bg-slate-900/60 rounded-xl p-6 border border-slate-800 text-left">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">How to Connect</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                      <p className="text-sm text-slate-300">Power on your Sentry device and connect it to your network</p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                      <p className="text-sm text-slate-300">Access the Sentry portal at <code className="text-cyan-400 bg-slate-800 px-1.5 py-0.5 rounded text-xs">http://sentry.local:8001</code></p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                      <p className="text-sm text-slate-300">Copy the pairing code (e.g., <code className="text-cyan-400 bg-slate-800 px-1.5 py-0.5 rounded text-xs">SN7-K2M</code>) and click below</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-8 px-10 py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-cyan-900/30 hover:shadow-cyan-900/50 hover:scale-105 flex items-center gap-2 mx-auto"
+                >
+                  <Plus className="w-5 h-5" />
+                  Enter Pairing Code
+                </button>
+              </div>
             </div>
           ) : (
             devices.map(device => (
@@ -211,66 +241,120 @@ export const DevicesPage = () => {
             <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
               {newDeviceKey ? (
                 <div className="p-8 text-center space-y-6">
-                  <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto text-green-400">
-                    <Check className="w-8 h-8" />
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-20 h-20 bg-green-500/20 rounded-full animate-ping" />
+                    </div>
+                    <div className="relative w-20 h-20 bg-gradient-to-br from-green-500/30 to-green-600/20 rounded-full flex items-center justify-center mx-auto border-2 border-green-500/40">
+                      <Check className="w-10 h-10 text-green-400" />
+                    </div>
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Device Linked!</h2>
-                  <p className="text-slate-400 text-sm">Copy this API Key into your Sentry device to complete the setup.</p>
-                  <div className="bg-black/40 border border-slate-700 rounded-lg p-4 relative text-left">
-                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Device API Key</p>
-                    <code className="text-cyan-400 font-mono text-xs break-all">{newDeviceKey}</code>
-                    <button 
-                      onClick={() => navigator.clipboard.writeText(newDeviceKey)}
-                      className="absolute top-2 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300"
-                    >
-                      <Key className="w-3.5 h-3.5" />
-                    </button>
+                  
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Almost There!</h2>
+                    <p className="text-slate-400 text-sm mt-2">Copy the API key below and paste it into your Sentry device to complete the connection.</p>
                   </div>
+                  
+                  <div className="bg-slate-950/80 border-2 border-dashed border-cyan-500/30 rounded-xl p-5 relative text-left">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider">Device API Key</p>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(newDeviceKey);
+                          // Could add a toast here
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 rounded text-white text-xs font-bold transition-colors"
+                      >
+                        <Key className="w-3 h-3" />
+                        Copy
+                      </button>
+                    </div>
+                    <code className="text-cyan-400 font-mono text-sm break-all leading-relaxed">{newDeviceKey}</code>
+                  </div>
+                  
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-4 text-left">
+                    <p className="text-xs text-slate-500 mb-2 font-medium">Next Step:</p>
+                    <p className="text-sm text-slate-300">Go to your Sentry device portal, paste this key in the "Device API Key" field, and click <span className="text-cyan-400 font-semibold">"Connect Sentry"</span></p>
+                  </div>
+                  
                   <button 
                     onClick={() => { setShowAddModal(false); setNewDeviceKey(null); }}
-                    className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold"
+                    className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-colors"
                   >
-                    Close
+                    Done
                   </button>
                 </div>
               ) : (
                 <div className="p-8">
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-white">Add New Sentry</h2>
-                    <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-white">✕</button>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">Pair Your Sentry Device</h2>
+                      <p className="text-sm text-slate-500 mt-1">Enter the code shown on your Sentry's screen</p>
+                    </div>
+                    <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-white p-1 hover:bg-slate-800 rounded">✕</button>
                   </div>
+                  
                   <form onSubmit={handleClaim} className="space-y-5">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Claim Token</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pairing Code</label>
                       <input 
                         type="text" 
-                        placeholder="ABC-123"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-center text-2xl font-mono tracking-widest text-white focus:border-cyan-500 outline-none transition-colors"
+                        placeholder="XXX-XXX"
+                        className="w-full bg-slate-950 border-2 border-slate-700 rounded-xl p-4 text-center text-3xl font-mono tracking-[0.4em] text-white focus:border-cyan-500 outline-none transition-colors placeholder:text-slate-700 placeholder:tracking-[0.4em]"
                         value={claimToken}
-                        onChange={e => setClaimToken(e.target.value.toUpperCase())}
+                        onChange={e => {
+                          let val = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+                          // Auto-insert hyphen after 3 characters
+                          if (val.length === 3 && !val.includes('-')) {
+                            val = val + '-';
+                          }
+                          setClaimToken(val);
+                        }}
                         maxLength={7}
                         required
+                        autoFocus
                       />
+                      <p className="text-xs text-slate-600 text-center mt-2">Find this code on your Sentry device's setup screen</p>
                     </div>
+                    
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Friendly Name</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Device Name <span className="text-slate-600 font-normal">(optional)</span></label>
                       <input 
                         type="text" 
-                        placeholder="Home Office"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-cyan-500 outline-none transition-colors"
+                        placeholder="e.g., Office Network, Home Lab"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-cyan-500 outline-none transition-colors placeholder:text-slate-600"
                         value={claimName}
                         onChange={e => setClaimName(e.target.value)}
                       />
                     </div>
-                    {error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-sm">{error}</div>}
+                    
+                    {error && (
+                      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                          <span className="text-red-400 text-xs">!</span>
+                        </div>
+                        <div>
+                          <p className="text-red-400 text-sm font-medium">Pairing Failed</p>
+                          <p className="text-red-400/70 text-xs mt-1">{error}</p>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="flex gap-3 pt-2">
-                      <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold">Cancel</button>
+                      <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-bold transition-colors">Cancel</button>
                       <button 
                         type="submit" 
-                        disabled={isClaiming || claimToken.length < 6}
-                        className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center justify-center gap-2"
+                        disabled={isClaiming || claimToken.length < 7}
+                        className="flex-1 py-3.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-all"
                       >
-                        {isClaiming ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Link Device"}
+                        {isClaiming ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          "Pair Device"
+                        )}
                       </button>
                     </div>
                   </form>
