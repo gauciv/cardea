@@ -89,10 +89,17 @@ app = FastAPI(
 )
 
 # --- CRITICAL FIX: CORS MIDDLEWARE ---
-# This allows your Dashboard (frontend) to talk to this Backend
+# Explicitly whitelist allowed domains to fix CORS errors
+origins = [
+    "http://localhost:5173",  # Local development
+    "http://localhost:4173",  # Local preview
+    "https://cardea.triji.me", # <--- PRODUCTION FRONTEND (Fixes your error)
+    "https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io", # Self/Backend
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For production, strictly restrict this to your Static App URL
+    allow_origins=origins, # Use the explicit list
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,7 +108,7 @@ app.add_middleware(
 # --- REGISTER ROUTERS ---
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
-app.include_router(devices.router, prefix="/api/devices", tags=["Devices"]) # New Devices Endpoint
+app.include_router(devices.router, prefix="/api/devices", tags=["Devices"])
 
 @app.get("/health")
 async def health_check():
