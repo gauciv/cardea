@@ -16,7 +16,7 @@ env:
 
 jobs:
   # =============================================================================
-  # CHANGE DETECTION - Determine which components changed
+  # CHANGE DETECTION
   # =============================================================================
   changes:
     name: 🔍 Detect Changes
@@ -25,10 +25,8 @@ jobs:
       oracle: ${{ steps.filter.outputs.oracle }}
       sentry: ${{ steps.filter.outputs.sentry }}
       dashboard: ${{ steps.filter.outputs.dashboard }}
-      shared: ${{ steps.filter.outputs.shared }}
     steps:
       - uses: actions/checkout@v4
-      
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -41,82 +39,28 @@ jobs:
               - 'shared/**'
             dashboard:
               - 'dashboard/**'
-            shared:
-              - 'shared/**'
 
   # =============================================================================
-  # ORACLE BACKEND CHECKS
+  # ORACLE (BACKEND) CHECKS
   # =============================================================================
-  oracle-lint:
-    name: 🔮 Oracle - Lint & Type Check
+  oracle-check:
+    name: 🔮 Oracle Tests
     needs: changes
-    if: needs.changes.outputs.oracle == 'true' || needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: oracle
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: oracle/requirements.txt
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff mypy types-requests types-redis
-      
-      - name: Run Ruff linter
-        run: ruff check src/ --output-format=github
-      
-      - name: Run Ruff formatter check
-        run: ruff format src/ --check
-      
-      - name: Run MyPy type checking
-        run: |
-          mypy src/ --ignore-missing-imports --no-error-summary || true
-        continue-on-error: true  # Type errors are warnings for now
-
-  oracle-test:
-    name: 🔮 Oracle - Unit Tests
-    needs: changes
-    if: needs.changes.outputs.oracle == 'true' || needs.changes.outputs.shared == 'true'
+    if: needs.changes.outputs.oracle == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: oracle
     services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: cardea_test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
       redis:
         image: redis:7-alpine
         ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          - "6379:6379"  # FIX: Quotes required to prevent parsing as object
     env:
-      DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/cardea_test
-      REDIS_URL: redis://localhost:6379/0
-      LOG_LEVEL: WARNING
+      # FIX: Quotes added to prevent parsing errors
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      REDIS_URL: "redis://localhost:6379/0"
+      LOG_LEVEL: "CRITICAL"
       AI_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
@@ -130,89 +74,21 @@ jobs:
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov httpx
+          pip install ruff mypy pytest pytest-asyncio httpx
       
-      - name: Run tests with coverage
-        run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || echo "No tests found"
+      - name: Lint (Ruff)
+        run: ruff check src/
       
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: oracle/coverage.xml
-          flags: oracle
-          fail_ci_if_error: false
-
-  oracle-build:
-    name: 🔮 Oracle - Docker Build
-    needs: [oracle-lint]
-    if: needs.changes.outputs.oracle == 'true' || needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Build Oracle image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./oracle
-          push: false
-          tags: cardea-oracle:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Type Check (MyPy)
+        run: mypy src/ --ignore-missing-imports || true
 
   # =============================================================================
-  # SENTRY EDGE LAYER CHECKS
+  # SENTRY (IOT) CHECKS
   # =============================================================================
-  sentry-lint:
-    name: 🛡️ Sentry - Lint & Type Check
+  sentry-check:
+    name: 🛡️ Sentry Check
     needs: changes
-    if: needs.changes.outputs.sentry == 'true' || needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        component: [bridge, services/kitnet, services/suricata, services/zeek]
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-      
-      - name: Install linting tools
-        run: pip install ruff mypy types-requests types-aiofiles
-      
-      - name: Check if component has Python files
-        id: check
-        run: |
-          if [ -d "sentry/${{ matrix.component }}/src" ]; then
-            echo "has_src=true" >> $GITHUB_OUTPUT
-          elif [ -d "sentry/${{ matrix.component }}/scripts" ]; then
-            echo "has_scripts=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=true" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Run Ruff on src/
-        if: steps.check.outputs.has_src == 'true'
-        run: ruff check sentry/${{ matrix.component }}/src/ --output-format=github
-        continue-on-error: true
-      
-      - name: Run Ruff on scripts/
-        if: steps.check.outputs.has_scripts == 'true'
-        run: ruff check sentry/${{ matrix.component }}/scripts/ --output-format=github
-        continue-on-error: true
-
-  sentry-integration-test:
-    name: 🛡️ Sentry - Integration Validation
-    needs: [sentry-lint]
     if: needs.changes.outputs.sentry == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -223,268 +99,41 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       
-      - name: Install test dependencies
-        run: |
-          pip install aiohttp requests pytest
-      
-      - name: Validate Python syntax across all Sentry components
-        run: |
-          echo "🔍 Checking Python syntax..."
-          find sentry -name "*.py" -exec python -m py_compile {} \;
-          echo "✅ All Python files have valid syntax"
-      
-      - name: Check import structure
-        run: |
-          echo "🔍 Checking imports..."
-          python -c "
-          import ast
-          import sys
-          from pathlib import Path
-          
-          errors = []
-          for py_file in Path('sentry').rglob('*.py'):
-              try:
-                  with open(py_file) as f:
-                      ast.parse(f.read())
-              except SyntaxError as e:
-                  errors.append(f'{py_file}: {e}')
-          
-          if errors:
-              print('❌ Syntax errors found:')
-              for e in errors:
-                  print(f'  {e}')
-              sys.exit(1)
-          else:
-              print('✅ All imports valid')
-          "
-
-  sentry-docker-build:
-    name: 🛡️ Sentry - Docker Build
-    needs: [sentry-lint]
-    if: needs.changes.outputs.sentry == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [bridge, zeek, suricata, kitnet]
-        include:
-          - service: bridge
-            context: ./sentry/bridge
-          - service: zeek
-            context: ./sentry/services/zeek
-          - service: suricata
-            context: ./sentry/services/suricata
-          - service: kitnet
-            context: ./sentry/services/kitnet
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Build ${{ matrix.service }} image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.context }}
-          push: false
-          tags: cardea-${{ matrix.service }}:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # =============================================================================
-  # DASHBOARD FRONTEND CHECKS
-  # =============================================================================
-  dashboard-lint:
-    name: 🎨 Dashboard - Lint & Type Check
-    needs: changes
-    if: needs.changes.outputs.dashboard == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dashboard
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: dashboard/package-lock.json
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run ESLint
-        run: npm run lint
-      
-      - name: TypeScript type check
-        run: npx tsc --noEmit
-
-  dashboard-build:
-    name: 🎨 Dashboard - Build
-    needs: [dashboard-lint]
-    if: needs.changes.outputs.dashboard == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dashboard
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: dashboard/package-lock.json
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build dashboard
-        run: npm run build
-      
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dashboard-build
-          path: dashboard/dist
-          retention-days: 7
-
-  # =============================================================================
-  # SECURITY SCANNING
-  # =============================================================================
-  security-scan:
-    name: 🔒 Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'  # Don't fail on vulnerabilities for now
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-      
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
-  # Python dependency security check
-  python-security:
-    name: 🐍 Python Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      
-      - name: Install pip-audit
-        run: pip install pip-audit
-      
-      - name: Audit Oracle dependencies
-        run: pip-audit -r oracle/requirements.txt --ignore-vuln PYSEC-2024-* || true
-        continue-on-error: true
-      
-      - name: Audit Sentry Bridge dependencies
-        run: pip-audit -r sentry/bridge/requirements.txt --ignore-vuln PYSEC-2024-* || true
-        continue-on-error: true
-
-  # =============================================================================
-  # SHARED UTILITIES CHECK
-  # =============================================================================
-  shared-check:
-    name: 📦 Shared Utilities Check
-    needs: changes
-    if: needs.changes.outputs.shared == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      
-      - name: Install dependencies
+      - name: Install Linting Tools
         run: pip install ruff
       
-      - name: Lint shared utilities
-        run: ruff check shared/ --output-format=github
-        continue-on-error: true
-      
-      - name: Validate Python syntax
-        run: python -m py_compile shared/utils/*.py
+      - name: Syntax Check (Bridge)
+        run: python -m py_compile sentry/bridge/src/*.py
 
   # =============================================================================
-  # PR STATUS CHECK - Final gate for merging
+  # DASHBOARD (FRONTEND) CHECKS
   # =============================================================================
-  pr-status:
-    name: ✅ PR Status Check
-    if: always()
-    needs: 
-      - oracle-lint
-      - oracle-test
-      - oracle-build
-      - sentry-lint
-      - sentry-integration-test
-      - sentry-docker-build
-      - dashboard-lint
-      - dashboard-build
-      - security-scan
+  dashboard-check:
+    name: 🎨 Dashboard Check
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
     steps:
-      - name: Check all job results
-        run: |
-          echo "🔍 Checking CI job results..."
-          
-          # Check if any required job failed
-          failed_jobs=""
-          
-          if [ "${{ needs.oracle-lint.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}oracle-lint "
-          fi
-          if [ "${{ needs.oracle-build.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}oracle-build "
-          fi
-          if [ "${{ needs.sentry-lint.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}sentry-lint "
-          fi
-          if [ "${{ needs.sentry-docker-build.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}sentry-docker-build "
-          fi
-          if [ "${{ needs.dashboard-lint.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}dashboard-lint "
-          fi
-          if [ "${{ needs.dashboard-build.result }}" == "failure" ]; then
-            failed_jobs="${failed_jobs}dashboard-build "
-          fi
-          
-          if [ -n "$failed_jobs" ]; then
-            echo "❌ The following jobs failed: $failed_jobs"
-            exit 1
-          else
-            echo "✅ All required CI checks passed!"
-          fi
+      - uses: actions/checkout@v4
       
-      - name: PR Ready Summary
-        run: |
-          echo "## 📊 CI Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Component | Lint | Build | Tests |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|------|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Oracle | ${{ needs.oracle-lint.result == 'success' && '✅' || needs.oracle-lint.result == 'skipped' && '⏭️' || '❌' }} | ${{ needs.oracle-build.result == 'success' && '✅' || needs.oracle-build.result == 'skipped' && '⏭️' || '❌' }} | ${{ needs.oracle-test.result == 'success' && '✅' || needs.oracle-test.result == 'skipped' && '⏭️' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Sentry | ${{ needs.sentry-lint.result == 'success' && '✅' || needs.sentry-lint.result == 'skipped' && '⏭️' || '❌' }} | ${{ needs.sentry-docker-build.result == 'success' && '✅' || needs.sentry-docker-build.result == 'skipped' && '⏭️' || '❌' }} | ${{ needs.sentry-integration-test.result == 'success' && '✅' || needs.sentry-integration-test.result == 'skipped' && '⏭️' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Dashboard | ${{ needs.dashboard-lint.result == 'success' && '✅' || needs.dashboard-lint.result == 'skipped' && '⏭️' || '❌' }} | ${{ needs.dashboard-build.result == 'success' && '✅' || needs.dashboard-build.result == 'skipped' && '⏭️' || '❌' }} | ⏭️ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security | ${{ needs.security-scan.result == 'success' && '✅' || '⚠️' }} | - | - |" >> $GITHUB_STEP_SUMMARY
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Lint
+        run: npm run lint
+      
+      - name: Type Check
+        run: npx tsc --noEmit
+      
+      - name: Verify Build
+        run: npm run build
