@@ -21,6 +21,9 @@ const severityConfig = {
   low: { color: 'text-cyan-500', bg: 'bg-cyan-950/20 border-cyan-900/50', icon: Info },
 };
 
+// Typed default to fix build error
+const defaultSeverityStats: Record<string, number> = {};
+
 // Toast notification component
 const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 'success'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
   const config = {
@@ -369,8 +372,8 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  // FIX: Force cast the entire expression with parentheses to ensure type safety
-  const severityStats = (data?.alerts_by_severity || {}) as Record<string, number>;
+  // FIX: Use the strictly typed default constant
+  const severityStats = data?.alerts_by_severity || defaultSeverityStats;
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
@@ -510,8 +513,7 @@ const App: React.FC = () => {
                       <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
                       {Object.keys(severityStats).length > 0 && (
                         <div className="flex gap-3 mt-4">
-                          {/* FIX: Inline cast here as well to satisfy loop inference */}
-                          {Object.entries(severityStats as Record<string, number>).map(([severity, count]) => {
+                          {Object.entries(severityStats).map(([severity, count]) => {
                             const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
                             return (
                               <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
