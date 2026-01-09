@@ -214,6 +214,26 @@ async def init_database():
             ssl=ssl_ctx
         )
         
+        # --- CRITICAL FIX: SCHEMA PATCHING (AUTO-HEAL) ---
+        # This block runs raw SQL to fix the "UndefinedColumnError"
+        logger.info("🛠️ Running Schema Patch (Auto-Healing)...")
+        async with POOL.acquire() as conn:
+            try:
+                # Add device_id if missing
+                await conn.execute("""
+                    ALTER TABLE alerts 
+                    ADD COLUMN IF NOT EXISTS device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL;
+                """)
+                # Add threat_intel_id if missing
+                await conn.execute("""
+                    ALTER TABLE alerts 
+                    ADD COLUMN IF NOT EXISTS threat_intel_id INTEGER REFERENCES threat_intelligence(id);
+                """)
+                logger.info("✅ Schema patch applied successfully.")
+            except Exception as e:
+                # Safe to ignore if constraints or columns cause minor issues on retry
+                logger.warning(f"⚠️ Schema patch warning: {e}")
+
         # 2. SETUP ORM ENGINE (SQLAlchemy)
         # Use the original URL but ensure +asyncpg scheme
         orm_url = db_url
