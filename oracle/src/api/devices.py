@@ -67,23 +67,22 @@ async def register_device(req: DeviceRegisterRequest):
             )
             return {
                 "status": existing["status"],
-                "claim_token": existing["claim_token"] if existing["status"] == "unclaimed" else None,
+                "claim_token": existing["claim_token"] if existing["status"] == "UNCLAIMED" else None,
                 "message": "Device check-in successful"
             }
         
         # Register new device
-        new_id = str(uuid.uuid4())
         # Generate a 6-digit claim token (e.g., "AB3-9K2")
         claim_token = secrets.token_hex(3).upper() 
         claim_token = f"{claim_token[:3]}-{claim_token[3:]}"
         
-        # FIXED: Insert into 'friendly_name' instead of 'name'
+        # FIXED: Use UPPERCASE enum values + include device_type
         await conn.execute(
             """
-            INSERT INTO devices (id, hardware_id, friendly_name, status, claim_token, version, last_seen)
-            VALUES ($1, $2, $3, 'unclaimed', $4, $5, NOW())
+            INSERT INTO devices (hardware_id, friendly_name, status, device_type, claim_token, version, last_seen, created_at)
+            VALUES ($1, $2, 'UNCLAIMED', 'SENTRY_PI', $3, $4, NOW(), NOW())
             """,
-            new_id, req.hardware_id, f"Sentry-{req.hardware_id[-4:]}", claim_token, req.version
+            req.hardware_id, f"Sentry-{req.hardware_id[-4:]}", claim_token, req.version
         )
         
         return {
@@ -115,9 +114,9 @@ async def claim_device(req: DeviceClaimRequest):
         if DEMO_MODE and input_code == DEMO_CLAIM_CODE:
             logger.info(f"🎯 DEMO MODE: Accepting demo claim code '{input_code}'")
             
-            # Check if a demo device already exists
+            # Check if a demo device already exists (use UPPERCASE enum value)
             existing_demo = await conn.fetchrow(
-                "SELECT id, api_key FROM devices WHERE hardware_id LIKE 'demo-%' AND status = 'online' LIMIT 1"
+                "SELECT id, api_key FROM devices WHERE hardware_id LIKE 'demo-%' AND status = 'ONLINE' LIMIT 1"
             )
             
             if existing_demo and existing_demo["api_key"]:
@@ -136,10 +135,11 @@ async def claim_device(req: DeviceClaimRequest):
             friendly_name = req.friendly_name or "Demo Sentry"
             
             # Insert and return the auto-generated ID
+            # Note: Use UPPERCASE enum values to match PostgreSQL enum definition
             result = await conn.fetchrow(
                 """
-                INSERT INTO devices (hardware_id, friendly_name, status, api_key, version, last_seen, created_at)
-                VALUES ($1, $2, 'online', $3, '1.0.0', NOW(), NOW())
+                INSERT INTO devices (hardware_id, friendly_name, status, device_type, api_key, version, last_seen, created_at)
+                VALUES ($1, $2, 'ONLINE', 'SENTRY_PI', $3, '1.0.0', NOW(), NOW())
                 RETURNING id
                 """,
                 hardware_id, friendly_name, api_key
@@ -156,7 +156,7 @@ async def claim_device(req: DeviceClaimRequest):
         
         # ============ PRODUCTION MODE: Find device by claim token ============
         device = await conn.fetchrow(
-            "SELECT id, hardware_id FROM devices WHERE claim_token = $1 AND status = 'unclaimed'",
+            "SELECT id, hardware_id FROM devices WHERE claim_token = $1 AND status = 'UNCLAIMED'",
             input_code
         )
         
@@ -166,11 +166,11 @@ async def claim_device(req: DeviceClaimRequest):
         # Generate a permanent API Key for the device
         api_key = f"sk-{secrets.token_urlsafe(32)}"
         
-        # Update device status and API key
+        # Update device status and API key (use UPPERCASE enum value)
         await conn.execute(
             """
             UPDATE devices 
-            SET status = 'online', 
+            SET status = 'ONLINE', 
                 friendly_name = $1, 
                 claim_token = NULL, 
                 api_key = $2,
