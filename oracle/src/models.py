@@ -215,3 +215,48 @@ class User(BaseModel):
 
 # Update forward references
 HealthResponse.model_rebuild()
+
+class DeviceType(str, Enum):
+    SENTRY_PI = "sentry_pi"     # Raspberry Pi
+    SENTRY_LINUX = "sentry_linux" # Generic Linux
+    BRIDGE_CLI = "bridge_cli"   # Docker Bridge
+    UNKNOWN = "unknown"
+
+class DeviceStatus(str, Enum):
+    UNCLAIMED = "unclaimed"     # Waiting for user to scan QR
+    ONLINE = "online"           # Connected and sending heartbeats
+    OFFLINE = "offline"         # Missed heartbeats
+    MAINTENANCE = "maintenance" # Updating or disabled
+
+class DeviceRegisterRequest(BaseModel):
+    """
+    Sentry -> Oracle
+    Sentry announces itself on startup.
+    """
+    hardware_id: str = Field(..., description="Unique hardware UUID or Machine ID")
+    device_type: DeviceType = Field(default=DeviceType.SENTRY_PI)
+    version: str = Field(default="1.0.0")
+    public_key: Optional[str] = Field(None, description="For future E2E encryption")
+
+class DeviceClaimRequest(BaseModel):
+    """
+    Dashboard -> Oracle
+    User submits the 'Claim Token' displayed on the Sentry's local portal.
+    """
+    claim_token: str = Field(..., description="6-digit PIN or JWT from Sentry Local Portal")
+    friendly_name: str = Field(default="My Sentry", min_length=1, max_length=50)
+
+class DeviceResponse(BaseModel):
+    """
+    Oracle -> Dashboard
+    Device details shown in the User's device list.
+    """
+    id: str
+    hardware_id: str
+    name: str
+    status: DeviceStatus
+    device_type: DeviceType
+    last_seen: Optional[datetime] = None
+    ip_address: Optional[str] = None
+    version: str
+    registered_at: datetime

@@ -18,16 +18,16 @@
   },
   "routes": [
     {
-      "route": "/login",
-      "rewrite": "/login.html"
-    },
-    {
-      "route": "/dashboard",
-      "allowedRoles": ["authenticated"]
-    },
-    {
       "route": "/dashboard/*",
       "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/login",
+      "allowedRoles": ["anonymous", "authenticated"]
+    },
+    {
+      "route": "/",
+      "allowedRoles": ["anonymous", "authenticated"]
     },
     {
       "route": "/api/*",

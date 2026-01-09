@@ -7,7 +7,7 @@ export interface Alert {
   description: string;
   timestamp: string;
   threat_score?: number;
-  raw_data?: Record<string, unknown>; // Fixed: any -> unknown
+  raw_data?: Record<string, unknown>;
 }
 
 export interface ActionButton {
@@ -48,7 +48,7 @@ export interface AnalyticsResponse {
   alerts_by_severity?: Record<string, number>;
   alerts_by_type?: Record<string, number>;
   top_threats?: ThreatInfo[];
-  trend_data?: Record<string, unknown>[]; // Fixed: any -> unknown
+  trend_data?: Record<string, unknown>[];
   ai_insight?: AIInsight;
   generated_at?: string;
 }
@@ -77,4 +77,17 @@ export interface FlowData {
     target: string;
     animated?: boolean;
   }>;
+}
+
+// --- NEW INTERFACE FOR DEVICES ---
+export interface Device {
+  id: string;
+  hardware_id: string;
+  name: string;
+  status: 'online' | 'offline' | 'unclaimed' | 'maintenance';
+  device_type: string;
+  last_seen: string | null;
+  ip_address: string | null;
+  version: string;
+  registered_at: string;
 }
