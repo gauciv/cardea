@@ -1014,7 +1014,7 @@ class AlertCorrelator:
 # Initialize the Analyzer Global Instance
 analyzer = ThreatAnalyzer()
 
-@router.get("/")
+@router.get("")
 async def get_analytics(time_range: str = Query("today", description="Time range for analysis")):
     """
     Dashboard Endpoint: Returns consolidated security stats.
