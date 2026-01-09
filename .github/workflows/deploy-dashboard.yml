@@ -44,17 +44,14 @@ jobs:
       - name: Azure Login
         uses: azure/login@v1
         with:
-          # Use the same JSON secret as the Oracle deployment
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Get Fresh Deployment Token
         id: get_token
         run: |
-          # Ensure this matches your actual Resource Group name
           RG_NAME="rg-cardea-prod" 
           
           echo "🔹 Fetching token for Resource Group: $RG_NAME"
-          # Get the Static Web App name dynamically
           SWA_NAME=$(az staticwebapp list --resource-group $RG_NAME --query "[0].name" -o tsv)
           
           if [ -z "$SWA_NAME" ]; then
@@ -75,7 +72,8 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.get_token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "dashboard" 
-          # We point to 'dist' because we built it manually above
-          output_location: "dist" 
+          # FIX: Point directly to the build artifact folder
+          app_location: "dashboard/dist" 
+          # FIX: Clear output_location since we are pointing directly to dist
+          output_location: "" 
           skip_app_build: true

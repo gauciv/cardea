@@ -10,11 +10,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write # Required for OIDC login if you switch to it later
+  id-token: write 
   contents: read
 
 env:
-  # Update these if your resource names differ
   REGISTRY_NAME: ${{ secrets.ACR_LOGIN_SERVER }}
   IMAGE_NAME: cardea-oracle
   RESOURCE_GROUP: rg-cardea-prod
@@ -35,6 +34,10 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      # FIX: This step is required for caching to work
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -51,7 +54,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Caching speeds up builds significantly
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -61,9 +63,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Azure Container Apps
-        # We use the CLI directly because it's more reliable than the wrapper action
         run: |
-          # Get the full image tag (e.g., myregistry.azurecr.io/cardea-oracle:sha-123456...)
           IMAGE_TAG="${{ env.REGISTRY_NAME }}/${{ env.IMAGE_NAME }}:sha-$(git rev-parse HEAD)"
           
           echo "Deploying image: $IMAGE_TAG"
