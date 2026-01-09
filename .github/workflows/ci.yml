@@ -55,9 +55,8 @@ jobs:
       redis:
         image: redis:7-alpine
         ports:
-          - "6379:6379"  # FIX: Quotes required to prevent parsing as object
+          - "6379:6379"
     env:
-      # FIX: Quotes added to prevent parsing errors
       DATABASE_URL: "sqlite+aiosqlite:///:memory:"
       REDIS_URL: "redis://localhost:6379/0"
       LOG_LEVEL: "CRITICAL"
