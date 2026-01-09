@@ -5,8 +5,9 @@ SQLAlchemy models for Oracle backend data persistence (Async PostgreSQL optimize
 
 import logging
 import os
-import ssl  # Added: Required for Azure SSL context
+import ssl
 import asyncpg
+from urllib.parse import urlparse, urlunparse
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -27,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from config import settings
-from models import DeviceStatus, DeviceType  # Import enums defined in models.py
+from models import DeviceStatus, DeviceType
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +50,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=True)  # Nullable for OAuth users
+    hashed_password = Column(String(255), nullable=True)
     full_name = Column(String(200), nullable=True)
     
     is_active = Column(Boolean, default=True)
-    roles = Column(JSON, default=list)  # ["user", "admin"]
+    roles = Column(JSON, default=list)
     
     # Auth & Security
     email_verified = Column(Boolean, default=False)
@@ -184,7 +185,7 @@ def create_ssl_context():
     """Create a safe SSL context for Azure PostgreSQL"""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE  # For Azure Flexible Server without custom cert setup
+    ctx.verify_mode = ssl.CERT_NONE  # Accept Azure's cert without strictly verifying chain
     return ctx
 
 async def init_database():
@@ -194,33 +195,34 @@ async def init_database():
     try:
         db_url = settings.DATABASE_URL
         
-        # --- FIX: Handle SSL for AsyncPG explicitly ---
-        # If 'sslmode' is in the URL, remove it because we will pass ssl context manually
-        # This prevents the 'parameter "ssl" cannot be changed now' error
-        raw_url = db_url.replace("+asyncpg", "")
-        if "sslmode=" in raw_url:
-            raw_url = raw_url.split("?")[0] # Strip query params safely for raw connection
-
         # 1. SETUP RAW POOL (asyncpg)
         logger.info("Initializing raw asyncpg connection pool...")
-        # Create explicit SSL context
+        
+        # Parse URL to strip ALL query parameters (like sslmode=require)
+        # This prevents conflict with the manual SSL context we are passing
+        parsed = urlparse(db_url)
+        # Reconstruct URL with scheme 'postgresql' and NO query params
+        # This keeps user:pass@host:port/dbname
+        clean_url = urlunparse(("postgresql", parsed.netloc, parsed.path, "", "", ""))
+        
         ssl_ctx = create_ssl_context()
         
         POOL = await asyncpg.create_pool(
-            raw_url,
+            clean_url,
             min_size=1,
             max_size=10,
-            ssl=ssl_ctx # Pass the context here!
+            ssl=ssl_ctx
         )
         
         # 2. SETUP ORM ENGINE (SQLAlchemy)
+        # Use the original URL but ensure +asyncpg scheme
         orm_url = db_url
         if orm_url.startswith("postgresql://"):
             orm_url = orm_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         
         logger.info(f"Connecting to ORM via: {orm_url.split('@')[-1]}")
         
-        # SQLAlchemy needs 'connect_args' to pass SSL settings to the underlying driver
+        # Pass SSL context via connect_args for SQLAlchemy/asyncpg
         engine = create_async_engine(
             orm_url,
             echo=False,
@@ -244,7 +246,6 @@ async def init_database():
         
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
-        # Log stack trace for easier debugging
         import traceback
         traceback.print_exc()
         raise
