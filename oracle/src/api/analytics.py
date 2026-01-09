@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
+from fastapi import APIRouter, Query
+from sqlalchemy import select, and_
 
 import sys
 from pathlib import Path
@@ -34,6 +36,7 @@ except ImportError:
     from src.models import AlertSeverity, AlertType, ThreatInfo
     from src.search_service import ThreatIntelligenceSearch
 logger = logging.getLogger(__name__)
+router = APIRouter()
 
 class ThreatAnalyzer:
     """Advanced threat analysis with AI-powered agentic reasoning and RAG"""
@@ -1008,3 +1011,54 @@ class AlertCorrelator:
         
         return correlations
 
+# Initialize the Analyzer Global Instance
+analyzer = ThreatAnalyzer()
+
+@router.get("/")
+async def get_analytics(time_range: str = Query("today", description="Time range for analysis")):
+    """
+    Dashboard Endpoint: Returns consolidated security stats.
+    Mapped to: GET /api/analytics
+    """
+    # 1. Determine Time Window
+    seconds = 86400  # Default 24h
+    if time_range == "hour":
+        seconds = 3600
+    elif time_range == "week":
+        seconds = 604800
+
+    # 2. Run your Advanced Analysis
+    # This runs your existing analyze_threats() logic
+    analysis_result = await analyzer.analyze_threats(time_window=seconds)
+
+    # 3. Fetch Raw Data for Dashboard Charts
+    # (We do a lightweight query here to ensure the dashboard charts have the exact data structure they need)
+    async with get_db() as db:
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(seconds=seconds)
+        
+        # Get raw alerts for the "Recent Events" table
+        stmt = select(Alert).where(
+            and_(Alert.timestamp >= start_time, Alert.timestamp <= end_time)
+        ).order_by(Alert.timestamp.desc()).limit(50)
+        
+        result = await db.execute(stmt)
+        raw_alerts = result.scalars().all()
+
+        # Calculate counts for the "Network Status" chart
+        severity_counts = Counter([a.severity for a in raw_alerts])
+        
+    # 4. Construct Response matching Dashboard 'AnalyticsResponse' interface
+    return {
+        "total_alerts": len(raw_alerts),
+        "risk_score": analysis_result.get("risk_score", 0),
+        "alerts_by_severity": dict(severity_counts),
+        "alerts": raw_alerts,
+        "ai_insight": {
+            # Take the first recommendation from your analysis as the summary
+            "summary": str(analysis_result.get("recommendations", ["Monitoring active. No critical anomalies detected."])[0]),
+            "confidence": 0.85,
+            "ai_powered": analysis_result.get("ai_enhanced", False),
+            "technical_summary": f"Detected {len(analysis_result.get('threats', []))} active threat clusters."
+        }
+    }
