@@ -4,6 +4,11 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 import secrets
+import logging
+import traceback
+
+# Configure logger
+logger = logging.getLogger("cardea.oracle.devices")
 
 # Try-except block allows this to run if 'database' is a sibling or in src
 try:
@@ -14,6 +19,7 @@ except ImportError:
 router = APIRouter()
 
 # --- MODELS ---
+
 class DeviceRegisterRequest(BaseModel):
     hardware_id: str
     version: str = "1.0.0"
@@ -25,7 +31,7 @@ class DeviceClaimRequest(BaseModel):
 class DeviceResponse(BaseModel):
     id: str
     hardware_id: str
-    name: str
+    friendly_name: str  # FIXED: Matches database column name
     status: str
     last_seen: Optional[datetime]
     ip_address: Optional[str]
@@ -65,9 +71,10 @@ async def register_device(req: DeviceRegisterRequest):
         claim_token = secrets.token_hex(3).upper() 
         claim_token = f"{claim_token[:3]}-{claim_token[3:]}"
         
+        # FIXED: Insert into 'friendly_name' instead of 'name'
         await conn.execute(
             """
-            INSERT INTO devices (id, hardware_id, name, status, claim_token, version, last_seen)
+            INSERT INTO devices (id, hardware_id, friendly_name, status, claim_token, version, last_seen)
             VALUES ($1, $2, $3, 'unclaimed', $4, $5, NOW())
             """,
             new_id, req.hardware_id, f"Sentry-{req.hardware_id[-4:]}", claim_token, req.version
@@ -100,21 +107,20 @@ async def claim_device(req: DeviceClaimRequest):
         # Generate a permanent API Key for the device
         api_key = f"sk-{secrets.token_urlsafe(32)}"
         
-        # Update device status
+        # FIXED: Update 'friendly_name' instead of 'name'
         await conn.execute(
             """
             UPDATE devices 
             SET status = 'online', 
-                name = $1, 
+                friendly_name = $1, 
                 claim_token = NULL, 
                 api_key = $2,
-                registered_at = NOW()
+                updated_at = NOW()
             WHERE id = $3
             """,
             req.friendly_name, api_key, device["id"]
         )
         
-        # Return the API Key ONE TIME ONLY
         return {
             "success": True,
             "device_id": device["id"],
@@ -128,10 +134,24 @@ async def claim_device(req: DeviceClaimRequest):
 async def list_devices():
     """
     Called by Dashboard to show user's devices.
+    Hardened to handle database drift and prevent 500 errors.
     """
-    conn = await get_db_connection()
+    conn = None
     try:
-        rows = await conn.fetch("SELECT id, hardware_id, name, status, last_seen, ip_address, version FROM devices ORDER BY last_seen DESC")
+        conn = await get_db_connection()
+        # FIXED: Querying 'friendly_name' instead of 'name'
+        # Added NULLS LAST to ensure active devices appear at the top
+        rows = await conn.fetch("""
+            SELECT id, hardware_id, friendly_name, status, last_seen, ip_address, version 
+            FROM devices 
+            ORDER BY last_seen DESC NULLS LAST
+        """)
         return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"❌ Device List Endpoint failed: {e}")
+        traceback.print_exc()
+        # Return empty list rather than crashing with 500
+        return []
     finally:
-        await conn.close()
+        if conn:
+            await conn.close()
