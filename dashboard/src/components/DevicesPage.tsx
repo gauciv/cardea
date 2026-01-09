@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import type { Device } from '../types';
 
-// Extend the Device type to include the database field we just patched
+// Extend the Device type to include the database field patched in the backend
 interface ExtendedDevice extends Device {
   friendly_name: string;
 }
@@ -26,12 +26,16 @@ export const DevicesPage = () => {
   const [newDeviceKey, setNewDeviceKey] = useState<string | null>(null);
 
   const fetchDevices = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    
+    // Prevent flicker/redirect loop: If token is missing, just stop loading.
+    // Main app router should handle the primary redirect to login.
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        navigate('/login');
-        return;
-      }
       const res = await axios.get<ExtendedDevice[]>(`${ORACLE_URL}/api/devices/list`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -41,12 +45,24 @@ export const DevicesPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [navigate]);
+  }, [ORACLE_URL]);
 
   useEffect(() => {
-    fetchDevices();
-    const interval = setInterval(fetchDevices, 10000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+
+    if (isMounted) {
+      fetchDevices();
+    }
+
+    // Refresh interval: 30s to keep Azure warm without hammering the API
+    const interval = setInterval(() => {
+      if (isMounted) fetchDevices();
+    }, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [fetchDevices]);
 
   const handleClaim = async (e: React.FormEvent) => {
