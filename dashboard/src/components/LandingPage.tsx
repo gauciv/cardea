@@ -3,6 +3,80 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { Search, Shield, BarChart3, Zap, Bell, Brain, Monitor, Network, Eye, Activity, AlertTriangle, Lock, Menu, X, Twitter, Linkedin, Github } from "lucide-react";
 import cardeaLogo from "../assets/Cardea.png";
 
+// Animated Stars Component
+const AnimatedStars = ({ opacity }: { opacity: number }) => {
+  const [stars] = useState(() => Array.from({ length: 40 }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    size: Math.random() * 2 + 1.5,
+    duration: Math.random() * 12 + 8,
+    delay: Math.random() * 4,
+    moveX: (Math.random() - 0.5) * 60,
+    moveY: (Math.random() - 0.5) * 60,
+  })));
+
+  return (
+    <>
+      <style>{`
+        @keyframes starFloat {
+          0% { 
+            transform: translate(0, 0) scale(0.6);
+            opacity: 0.3;
+          }
+          33% { 
+            transform: translate(var(--move-x-1), var(--move-y-1)) scale(1.1);
+            opacity: 0.8;
+          }
+          66% { 
+            transform: translate(var(--move-x-2), var(--move-y-2)) scale(0.9);
+            opacity: 0.5;
+          }
+          100% { 
+            transform: translate(0, 0) scale(0.6);
+            opacity: 0.3;
+          }
+        }
+        @keyframes starPulse {
+          0%, 100% { 
+            opacity: 0.4; 
+            box-shadow: 0 0 4px rgba(255, 255, 255, 0.6), 0 0 8px rgba(74, 158, 218, 0.3);
+          }
+          50% { 
+            opacity: 0.9; 
+            box-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 0 16px rgba(74, 158, 218, 0.6);
+          }
+        }
+        .star-particle {
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 20%, rgba(74, 158, 218, 0.4) 70%, transparent 100%);
+        }
+      `}</style>
+      <div 
+        className="fixed inset-0 pointer-events-none z-20 overflow-hidden transition-opacity duration-700 ease-out"
+        style={{ opacity }}
+      >
+        {stars.map((star) => (
+          <div
+            key={star.id}
+            className="absolute rounded-full star-particle"
+            style={{
+              left: `${star.x}%`,
+              top: `${star.y}%`,
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              '--move-x-1': `${star.moveX * 0.6}px`,
+              '--move-y-1': `${star.moveY * 0.4}px`,
+              '--move-x-2': `${star.moveX * -0.8}px`,
+              '--move-y-2': `${star.moveY * 0.7}px`,
+              animation: `starFloat ${star.duration}s cubic-bezier(0.4, 0, 0.6, 1) infinite ${star.delay}s, starPulse ${star.duration * 0.6}s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite ${star.delay * 1.2}s`,
+            } as React.CSSProperties & Record<string, string>}
+          />
+        ))}
+      </div>
+    </>
+  );
+};
+
 // Easing function for smooth transition
 const easeOutCubic = (t: number): number => {
   return 1 - Math.pow(1 - t, 3);
@@ -14,10 +88,12 @@ const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const useCasesRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
+  const pricingRef = useRef<HTMLDivElement>(null);
   const [currentFeatureIndex, setCurrentFeatureIndex] = useState(0);
   const [activeTab, setActiveTab] = useState(0);
   const [useCasesVisible, setUseCasesVisible] = useState(false);
   const [featuresVisible, setFeaturesVisible] = useState(false);
+  const [pricingVisible, setPricingVisible] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Transition state
@@ -105,6 +181,9 @@ const LandingPage = () => {
             if (entry.target === featuresRef.current && entry.isIntersecting) {
               setFeaturesVisible(true);
             }
+            if (entry.target === pricingRef.current && entry.isIntersecting) {
+              setPricingVisible(true);
+            }
           });
         },
         { threshold: 0.1 }
@@ -115,6 +194,9 @@ const LandingPage = () => {
       }
       if (featuresRef.current) {
         observer.observe(featuresRef.current);
+      }
+      if (pricingRef.current) {
+        observer.observe(pricingRef.current);
       }
     }, 100);
 
@@ -261,6 +343,15 @@ const LandingPage = () => {
 
   return (
     <div ref={containerRef}>
+      {/* Animated Stars Background - Smooth opacity transition */}
+      <AnimatedStars 
+        opacity={
+          phase === 'hero' ? 1 :
+          phase === 'transitioning' ? (1 - animationProgress) :
+          0
+        } 
+      />
+      
       {/* Persistent Navigation - Sleek Modern Design */}
       <nav 
         className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-5 px-4 transition-all duration-700"
@@ -301,20 +392,28 @@ const LandingPage = () => {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-0.5">
             {navItems.map((item, index) => (
-              <a 
-                key={index} 
-                href={item.href} 
+              <a
+                key={index}
+                href={item.href}
                 onClick={(e) => {
+                  // prevent the hash fragment from appearing in the URL
+                  e.preventDefault();
                   if (item.name === 'Features') {
-                    e.preventDefault();
                     if (phase === 'hero') {
                       setPhase('transitioning');
                       runTransition();
                     } else if (phase === 'final') {
                       document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
                     }
-                  } else if (item.name === 'Home') {
+                  } else if (item.name === 'Pricing') {
                     e.preventDefault();
+                    if (phase === 'hero') {
+                      setPhase('transitioning');
+                      runTransition();
+                    } else if (phase === 'final') {
+                      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  } else if (item.name === 'Home') {
                     if (phase !== 'hero') {
                       setPhase('hero');
                       setAnimationProgress(0);
@@ -322,8 +421,8 @@ const LandingPage = () => {
                     }
                   }
                 }}
-                className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group" 
-                style={{ 
+                className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group"
+                style={{
                   fontFamily: 'Inter, Nunito, sans-serif',
                   fontWeight: 500,
                   letterSpacing: '0.01em',
@@ -343,7 +442,7 @@ const LandingPage = () => {
               <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
             </Link>
             <Link 
-              to="/login" 
+              to="/login?mode=register" 
               className="ml-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" 
               style={{ 
                 background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
@@ -387,6 +486,7 @@ const LandingPage = () => {
                   href={item.href}
                   onClick={(e) => {
                     setMobileMenuOpen(false);
+                    // prevent the hash fragment from appearing in the URL
                     e.preventDefault();
                     if (item.name === 'Features') {
                       if (phase === 'hero') {
@@ -394,6 +494,14 @@ const LandingPage = () => {
                         runTransition();
                       } else if (phase === 'final') {
                         document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    } else if (item.name === 'Pricing') {
+                      e.preventDefault();
+                      if (phase === 'hero') {
+                        setPhase('transitioning');
+                        runTransition();
+                      } else if (phase === 'final') {
+                        document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
                       }
                     } else if (item.name === 'Home') {
                       if (phase !== 'hero') {
@@ -418,7 +526,7 @@ const LandingPage = () => {
                 Log In
               </Link>
               <Link
-                to="/login"
+                to="/login?mode=register"
                 onClick={() => setMobileMenuOpen(false)}
                 className="mt-2 px-4 py-3 rounded-xl text-center font-semibold text-white transition-all"
                 style={{
@@ -669,7 +777,7 @@ const LandingPage = () => {
                 and <span className="text-blue-400">protection.</span><br />
                 <span className="text-gray-500">Powered by AI.</span>
               </h2>
-              <Link to="/login" className="mt-6 w-fit flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium border border-gray-600 text-white hover:bg-white/10 transition-all duration-300" style={{ fontFamily: 'Nunito, sans-serif' }}>
+              <Link to="/login?mode=register" className="mt-6 w-fit flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium border border-gray-600 text-white hover:bg-white/10 transition-all duration-300" style={{ fontFamily: 'Nunito, sans-serif' }}>
                 Get Started
                 <span className="w-8 h-8 rounded-full bg-[#2674b2] flex items-center justify-center">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -691,8 +799,9 @@ const LandingPage = () => {
         </div>
       </div>
 
-      {/* Use Cases Section - Third Full Page */}
       {phase === 'final' && (
+      <>
+      {/* Use Cases Section - Third Full Page */}
       <section 
         id="use-cases"
         ref={useCasesRef}
@@ -917,18 +1026,194 @@ const LandingPage = () => {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Pricing Section - Fourth Full Page */}
+      <section
+        id="pricing"
+        ref={pricingRef}
+        className="relative min-h-screen flex items-center"
+        style={{
+          background: 'linear-gradient(180deg, #030508 0%, #050810 30%, #0a1220 100%)',
+        }}
+      >
+        <div className="relative z-10 w-full px-8 md:px-16 lg:px-24 py-24">
+          <div 
+            className={`max-w-6xl mx-auto transition-all duration-1000 ${pricingVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'}`}
+          >
+            {/* Header */}
+            <div className="text-center mb-16">
+              <h2 className="text-3xl md:text-4xl lg:text-5xl text-white mb-6" style={{ fontFamily: 'Geo, sans-serif', fontWeight: 400 }}>
+                Pricing
+              </h2>
+              <p className="text-gray-400 text-lg max-w-2xl mx-auto" style={{ fontFamily: 'Nunito, sans-serif' }}>
+                Flexible plans for teams of all sizes. Start with a trial and scale up as you need enterprise features and support.
+              </p>
+            </div>
+
+            {/* Pricing Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Starter Plan */}
+              <div 
+                className="p-8 rounded-2xl border border-gray-700/50"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 25, 45, 0.9) 0%, rgba(10, 20, 40, 0.95) 100%)',
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 uppercase tracking-wider mb-4">Starter</div>
+                  <div className="text-4xl text-white font-bold mb-2">Free</div>
+                  <div className="text-gray-500 mb-8">Perfect for getting started</div>
+                  
+                  <ul className="text-left text-gray-300 mb-8 space-y-3">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Basic network monitoring
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Up to 3 monitored hosts
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Community support
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Email alerts
+                    </li>
+                  </ul>
+                  
+                  <Link 
+                    to="/login?mode=register"
+                    className="w-full block px-6 py-3 rounded-xl bg-white text-[#0a1220] font-semibold text-center transition-all duration-300 hover:bg-gray-100"
+                    style={{ fontFamily: 'Nunito, sans-serif' }}
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              </div>
+
+              {/* Pro Plan - Featured */}
+              <div 
+                className="p-8 rounded-2xl border-2 relative scale-105"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(38, 116, 178, 0.15) 0%, rgba(15, 25, 45, 0.95) 100%)',
+                  borderColor: '#4a9eda',
+                  boxShadow: '0 0 40px rgba(74, 158, 218, 0.25)',
+                }}
+              >
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                  <span 
+                    className="px-4 py-1 rounded-full text-xs font-semibold text-white"
+                    style={{ background: 'linear-gradient(135deg, #2674b2 0%, #4a9eda 100%)' }}
+                  >
+                    Most Popular
+                  </span>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 uppercase tracking-wider mb-4">Pro</div>
+                  <div className="text-4xl text-white font-bold mb-2">$49<span className="text-lg text-gray-400">/mo</span></div>
+                  <div className="text-gray-400 mb-8">For growing teams</div>
+                  
+                  <ul className="text-left text-gray-300 mb-8 space-y-3">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      AI-powered anomaly detection
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Up to 50 monitored hosts
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Priority email support
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Advanced analytics
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Custom alerting rules
+                    </li>
+                  </ul>
+                  
+                  <Link 
+                    to="/login?mode=register"
+                    className="w-full block px-6 py-3 rounded-xl font-semibold text-center transition-all duration-300"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #2674b2 0%, #4a9eda 100%)',
+                      color: 'white',
+                      fontFamily: 'Nunito, sans-serif' 
+                    }}
+                  >
+                    Start Free Trial
+                  </Link>
+                </div>
+              </div>
+
+              {/* Enterprise Plan */}
+              <div 
+                className="p-8 rounded-2xl border border-gray-700/50"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(15, 25, 45, 0.9) 0%, rgba(10, 20, 40, 0.95) 100%)',
+                }}
+              >
+                <div className="text-center">
+                  <div className="text-sm text-gray-400 uppercase tracking-wider mb-4">Enterprise</div>
+                  <div className="text-4xl text-white font-bold mb-2">Contact</div>
+                  <div className="text-gray-500 mb-8">For large organizations</div>
+                  
+                  <ul className="text-left text-gray-300 mb-8 space-y-3">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Unlimited monitored hosts
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      24/7 dedicated support
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      Custom integrations
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      On-premise deployment
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#4a9eda]"></div>
+                      SLA guarantees
+                    </li>
+                  </ul>
+                  
+                  <button 
+                    className="w-full px-6 py-3 rounded-xl bg-[#4a9eda] text-white font-semibold transition-all duration-300 hover:bg-[#3d8fd4]"
+                    style={{ fontFamily: 'Nunito, sans-serif' }}
+                  >
+                    Contact Sales
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
           {/* Footer */}
           <div 
-            className={`border-t border-gray-600/30 py-12 mt-auto transition-all duration-700 delay-500 ${useCasesVisible ? 'opacity-100' : 'opacity-0'}`}
-            style={{ background: 'rgba(0, 0, 0, 0.2)' }}
+            className={`border-t border-gray-600/30 py-12 mt-auto transition-all duration-700 delay-500 ${pricingVisible ? 'opacity-100' : 'opacity-0'}`}
+            style={{ background: '#000000' }}
           >
             <div className="max-w-7xl mx-auto px-8 md:px-16 lg:px-24">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
                 {/* Brand */}
                 <div className="md:col-span-2">
                   <div className="flex items-center gap-3 mb-4">
-                    <img src={cardeaLogo} alt="Cardea" className="h-8 w-auto" />
+                    <img src={cardeaLogo} alt="Cardea" className="h-10 w-auto filter brightness-110" />
                   </div>
                   <p className="text-gray-400 text-sm max-w-sm" style={{ fontFamily: 'Nunito, sans-serif' }}>
                     AI-powered network security that protects, detects, and responds automatically.
@@ -939,9 +1224,36 @@ const LandingPage = () => {
                 <div>
                   <h4 className="text-white font-semibold mb-4" style={{ fontFamily: 'Nunito, sans-serif' }}>Product</h4>
                   <ul className="space-y-2">
-                    <li><a href="#features" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Features</a></li>
-                    <li><a href="#pricing" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Pricing</a></li>
-                    <li><a href="#use-cases" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Use Cases</a></li>
+                    <li>
+                      <a
+                        href="#features"
+                        onClick={(e) => { e.preventDefault(); document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' }); }}
+                        className="text-white hover:text-blue-300 text-sm transition-colors"
+                        style={{ fontFamily: 'Nunito, sans-serif' }}
+                      >
+                        Features
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="#pricing"
+                        onClick={(e) => { e.preventDefault(); document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' }); }}
+                        className="text-white hover:text-blue-300 text-sm transition-colors"
+                        style={{ fontFamily: 'Nunito, sans-serif' }}
+                      >
+                        Pricing
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="#use-cases"
+                        onClick={(e) => { e.preventDefault(); document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' }); }}
+                        className="text-white hover:text-blue-300 text-sm transition-colors"
+                        style={{ fontFamily: 'Nunito, sans-serif' }}
+                      >
+                        Use Cases
+                      </a>
+                    </li>
                   </ul>
                 </div>
                 
@@ -949,7 +1261,6 @@ const LandingPage = () => {
                 <div>
                   <h4 className="text-white font-semibold mb-4" style={{ fontFamily: 'Nunito, sans-serif' }}>Legal</h4>
                   <ul className="space-y-2">
-                    <li><a href="/privacy" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Privacy Policy</a></li>
                     <li><a href="/terms" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Terms of Service</a></li>
                     <li><a href="/security" className="text-gray-400 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Nunito, sans-serif' }}>Security</a></li>
                   </ul>
@@ -958,27 +1269,26 @@ const LandingPage = () => {
               
               {/* Bottom bar */}
               <div className="pt-8 border-t border-gray-700/50 flex flex-col md:flex-row items-center justify-between gap-4">
-                <p className="text-gray-500 text-sm" style={{ fontFamily: 'Nunito, sans-serif' }}>
+                <p className="text-white text-sm" style={{ fontFamily: 'Nunito, sans-serif' }}>
                   © 2026 Cardea Security. All rights reserved.
                 </p>
                 
                 {/* Social Icons */}
                 <div className="flex items-center gap-4">
-                  <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#4a9eda] transition-colors">
+                  <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-white hover:text-[#4a9eda] transition-colors">
                     <Twitter className="w-5 h-5" />
                   </a>
-                  <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#4a9eda] transition-colors">
+                  <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="text-white hover:text-[#4a9eda] transition-colors">
                     <Linkedin className="w-5 h-5" />
                   </a>
-                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-[#4a9eda] transition-colors">
+                  <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-white hover:text-[#4a9eda] transition-colors">
                     <Github className="w-5 h-5" />
                   </a>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+      </>
       )}
     </div>
   );

@@ -48,7 +48,12 @@ interface FormState {
 }
 
 const LoginPage: React.FC = () => {
-    const [mode, setMode] = useState<AuthMode>('login');
+    // Get token and mode from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const modeParam = urlParams.get('mode') as AuthMode;
+
+    const [mode, setMode] = useState<AuthMode>(modeParam || 'login');
     const [isLoading, setIsLoading] = useState<string | null>(null);
     const [checkingAuth, setCheckingAuth] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -60,10 +65,6 @@ const LoginPage: React.FC = () => {
         confirmPassword: '',
         fullName: ''
     });
-    
-    // Get token from URL for email verification or password reset
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
 
     // Check if user is already authenticated
     useEffect(() => {
