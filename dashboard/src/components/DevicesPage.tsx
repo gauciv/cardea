@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
   Server, Plus, Wifi, WifiOff, 
-  Monitor, Cpu, RefreshCw, Trash2, Key, Check, ArrowLeft
+  Monitor, Cpu, RefreshCw, Trash2, Check, ArrowLeft, Copy, CheckCircle
 } from 'lucide-react';
 import type { Device } from '../types';
 
@@ -24,6 +24,7 @@ export const DevicesPage = () => {
   const [isClaiming, setIsClaiming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newDeviceKey, setNewDeviceKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   const fetchDevices = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -255,21 +256,37 @@ export const DevicesPage = () => {
                     <p className="text-slate-400 text-sm mt-2">Copy the API key below and paste it into your Sentry device to complete the connection.</p>
                   </div>
                   
-                  <div className="bg-slate-950/80 border-2 border-dashed border-cyan-500/30 rounded-xl p-5 relative text-left">
+                  <div className={`bg-slate-950/80 border-2 border-dashed rounded-xl p-5 relative text-left transition-all duration-300 ${keyCopied ? 'border-green-500/50 bg-green-950/20' : 'border-cyan-500/30'}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider">Device API Key</p>
+                      <p className={`text-[10px] uppercase font-bold tracking-wider transition-colors ${keyCopied ? 'text-green-400' : 'text-cyan-500'}`}>
+                        {keyCopied ? '✓ Copied to Clipboard!' : 'Device API Key'}
+                      </p>
                       <button 
                         onClick={() => {
                           navigator.clipboard.writeText(newDeviceKey);
-                          // Could add a toast here
+                          setKeyCopied(true);
+                          setTimeout(() => setKeyCopied(false), 3000);
                         }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 rounded text-white text-xs font-bold transition-colors"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-bold transition-all ${
+                          keyCopied 
+                            ? 'bg-green-600 hover:bg-green-500' 
+                            : 'bg-cyan-600 hover:bg-cyan-500'
+                        }`}
                       >
-                        <Key className="w-3 h-3" />
-                        Copy
+                        {keyCopied ? (
+                          <>
+                            <CheckCircle className="w-3 h-3" />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            Copy
+                          </>
+                        )}
                       </button>
                     </div>
-                    <code className="text-cyan-400 font-mono text-sm break-all leading-relaxed">{newDeviceKey}</code>
+                    <code className={`font-mono text-sm break-all leading-relaxed transition-colors ${keyCopied ? 'text-green-400' : 'text-cyan-400'}`}>{newDeviceKey}</code>
                   </div>
                   
                   <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-4 text-left">
@@ -278,7 +295,7 @@ export const DevicesPage = () => {
                   </div>
                   
                   <button 
-                    onClick={() => { setShowAddModal(false); setNewDeviceKey(null); }}
+                    onClick={() => { setShowAddModal(false); setNewDeviceKey(null); setKeyCopied(false); }}
                     className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold transition-colors"
                   >
                     Done
