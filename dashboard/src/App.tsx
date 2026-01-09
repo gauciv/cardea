@@ -456,7 +456,7 @@ const App: React.FC = () => {
       // 1. Fetch Analytics
       const res = await axios.get<AnalyticsResponse>(
         `${ORACLE_URL}/api/analytics?time_range=today`,
-        { timeout: 8000 }
+        { timeout: 30000 }
       );
       
       // 2. Fetch Devices Check
