@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import aiohttp
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from datetime import datetime
 from pathlib import Path
 
@@ -18,21 +18,105 @@ class OracleClient:
     """Client for communicating with Oracle cloud service"""
     
     def __init__(self, oracle_url: str, api_key: str = None):
-        self.oracle_url = oracle_url
+        self.oracle_url = oracle_url.rstrip('/')
         self.api_key = api_key or os.getenv("ORACLE_API_KEY")
-        self.session = None
+        self.session: Optional[aiohttp.ClientSession] = None
         self.connection_attempts = 0
         self.last_successful_ping = None
         
+    def update_api_key(self, new_key: str):
+        """Update API key dynamically (e.g. after claiming)"""
+        self.api_key = new_key
+        
     def _get_headers(self) -> Dict[str, str]:
-        """Get headers for Oracle API requests"""
+        """Get headers for standard Oracle API requests"""
         headers = {"Content-Type": "application/json"}
+        # Only attach Authorization header if we actually have a key
+        # (Registration requests won't have one initially)
         if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            # Also support the legacy header if your backend still checks it
             headers["X-Sentry-API-Key"] = self.api_key
         return headers
+
+    async def _ensure_session(self):
+        """Ensure HTTP session exists"""
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
+
+    # --- DEVICE MANAGEMENT ENDPOINTS ---
+
+    async def register_device(self, hardware_id: str, version: str = "1.0.0", device_type: str = "sentry_pi") -> Dict[str, Any]:
+        """
+        Register this device with Oracle on startup.
+        Returns the claim_token or status.
+        """
+        endpoint = f"{self.oracle_url}/api/devices/register"
+        payload = {
+            "hardware_id": hardware_id,
+            "version": version,
+            "device_type": device_type
+        }
+        
+        try:
+            await self._ensure_session()
+            async with self.session.post(endpoint, json=payload) as response:
+                if response.status in (200, 201):
+                    data = await response.json()
+                    logger.info(f"✅ Device registered: Status={data.get('status')}")
+                    return data
+                else:
+                    text = await response.text()
+                    logger.error(f"❌ Registration failed ({response.status}): {text}")
+                    return {"status": "error", "error": text}
+                    
+        except Exception as e:
+            logger.error(f"Registration connection error: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def send_heartbeat(self, hardware_id: str) -> bool:
+        """
+        Send periodic heartbeat to Oracle to confirm online status.
+        Uses specific X-Sentry headers as defined in the backend.
+        """
+        if not self.api_key:
+            # Cannot heartbeat without an API Key (device must be claimed first)
+            return False
+            
+        endpoint = f"{self.oracle_url}/api/devices/heartbeat"
+        
+        # Specific headers required by the backend endpoint
+        headers = {
+            "X-Sentry-ID": hardware_id,
+            "X-Sentry-Key": self.api_key
+        }
+        
+        try:
+            await self._ensure_session()
+            async with self.session.post(endpoint, headers=headers) as response:
+                if response.status == 200:
+                    self.last_successful_ping = datetime.now()
+                    return True
+                elif response.status == 403:
+                    logger.warning("❌ Heartbeat rejected: Invalid Credentials. Device may have been reset.")
+                    return False
+                else:
+                    logger.warning(f"Heartbeat failed: {response.status}")
+                    return False
+        except Exception as e:
+            logger.error(f"Heartbeat error: {e}")
+            return False
+
+    # --- ALERT ENDPOINTS ---
         
     async def escalate_anomaly(self, alert_data: Dict[str, Any]):
         """Escalate high-score anomaly to Oracle with evidence snapshot"""
+        if not self.api_key:
+            logger.warning("⚠️ Cannot escalate anomaly: Device not yet claimed/authenticated")
+            return
+
         logger.warning(f"🚨 Escalating anomaly to Oracle: score={alert_data.get('anomaly_score', 0):.4f}")
         
         # Collect evidence snapshot for the IP
@@ -41,26 +125,33 @@ class OracleClient:
         )
         
         escalation_data = {
-            "type": "anomaly_escalation",
+            "source": "bridge",
+            "alert_type": "network_anomaly",
+            "severity": "high" if alert_data.get('anomaly_score', 0) > 0.8 else "medium",
+            "title": f"Anomaly Detected: {alert_data.get('network', {}).get('src_ip', 'Unknown Source')}",
+            "description": f"Abnormal traffic pattern detected. Score: {alert_data.get('anomaly_score', 0):.2f}",
             "timestamp": datetime.now().isoformat(),
-            "sentry_data": alert_data,
-            "evidence_snapshot": evidence_snapshot,
-            "escalation_reason": "anomaly_score_threshold_exceeded",
-            "requires_analysis": True
+            "raw_data": alert_data,
+            "evidence": evidence_snapshot
         }
         
         await self._send_to_oracle(escalation_data)
     
     async def send_priority_alert(self, alert_data: Dict[str, Any]):
         """Send priority alert from Suricata to Oracle"""
+        if not self.api_key:
+            return
+
         logger.warning(f"Sending priority alert to Oracle: {alert_data.get('alert', {}).get('signature', 'Unknown')}")
         
         priority_data = {
-            "type": "priority_alert",
+            "source": "suricata",
+            "alert_type": "intrusion_detection",
+            "severity": "critical", # Suricata alerts are usually serious
+            "title": alert_data.get('alert', {}).get('signature', 'IDS Alert'),
+            "description": f"Signature match on {alert_data.get('dest_ip', 'unknown')}",
             "timestamp": datetime.now().isoformat(),
-            "sentry_data": alert_data,
-            "priority_reason": "high_severity_signature",
-            "requires_immediate_attention": True
+            "raw_data": alert_data
         }
         
         await self._send_to_oracle(priority_data)
@@ -129,25 +220,25 @@ class OracleClient:
             return None
     
     async def _send_to_oracle(self, data: Dict[str, Any]):
-        """Send data to Oracle service with authentication"""
+        """Send data to Oracle service (Alerts endpoint)"""
+        endpoint = f"{self.oracle_url}/api/alerts"
+        
         try:
-            if not self.session:
-                self.session = aiohttp.ClientSession()
+            await self._ensure_session()
             
             async with self.session.post(
-                self.oracle_url,
+                endpoint,
                 json=data,
                 headers=self._get_headers(),
                 timeout=aiohttp.ClientTimeout(total=30)
             ) as response:
                 
                 if response.status == 200:
-                    result = await response.json()
+                    await response.json()
                     self.last_successful_ping = datetime.now()
-                    logger.info(f"Data sent to Oracle: {result.get('status', 'unknown')}")
-                    self.connection_attempts = 0  # Reset on success
+                    self.connection_attempts = 0
                 else:
-                    logger.error(f"❌ Oracle responded with error: {response.status}")
+                    logger.error(f"❌ Oracle rejected alert: {response.status}")
                     
         except asyncio.TimeoutError:
             logger.error("Timeout connecting to Oracle")
@@ -160,42 +251,6 @@ class OracleClient:
         except Exception as e:
             logger.error(f"Unexpected error sending to Oracle: {e}")
             self.connection_attempts += 1
-    
-    async def ping_oracle(self) -> bool:
-        """Ping Oracle to check connectivity"""
-        try:
-            if not self.session:
-                self.session = aiohttp.ClientSession()
-            
-            # Try to ping a health endpoint
-            ping_url = self.oracle_url.replace("/api/alerts", "/health")
-            
-            async with self.session.get(
-                ping_url,
-                headers=self._get_headers(),
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
-                
-                if response.status == 200:
-                    self.last_successful_ping = datetime.now()
-                    logger.debug("Oracle connectivity OK")
-                    return True
-                else:
-                    logger.warning(f"Oracle ping failed: {response.status}")
-                    return False
-                    
-        except Exception as e:
-            logger.warning(f"Oracle ping error: {e}")
-            return False
-    
-    def get_connection_status(self) -> Dict[str, Any]:
-        """Get Oracle connection status"""
-        return {
-            "oracle_url": self.oracle_url,
-            "connection_attempts": self.connection_attempts,
-            "last_successful_ping": self.last_successful_ping.isoformat() if self.last_successful_ping else None,
-            "is_healthy": self.connection_attempts < 5 and self.last_successful_ping is not None
-        }
     
     async def close(self):
         """Close HTTP session"""
