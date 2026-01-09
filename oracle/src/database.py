@@ -5,6 +5,7 @@ SQLAlchemy models for Oracle backend data persistence (Async PostgreSQL optimize
 
 import logging
 import os
+import ssl  # Added: Required for Azure SSL context
 import asyncpg
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -179,6 +180,13 @@ class ThreatIntelligence(Base):
 
 # --- Connection Management ---
 
+def create_ssl_context():
+    """Create a safe SSL context for Azure PostgreSQL"""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # For Azure Flexible Server without custom cert setup
+    return ctx
+
 async def init_database():
     """Initialize database connection (ORM and Raw Pool) and create tables"""
     global engine, async_session, POOL
@@ -186,36 +194,46 @@ async def init_database():
     try:
         db_url = settings.DATABASE_URL
         
-        # 1. SETUP ORM ENGINE (SQLAlchemy)
-        # Ensure asyncpg driver
+        # --- FIX: Handle SSL for AsyncPG explicitly ---
+        # If 'sslmode' is in the URL, remove it because we will pass ssl context manually
+        # This prevents the 'parameter "ssl" cannot be changed now' error
+        raw_url = db_url.replace("+asyncpg", "")
+        if "sslmode=" in raw_url:
+            raw_url = raw_url.split("?")[0] # Strip query params safely for raw connection
+
+        # 1. SETUP RAW POOL (asyncpg)
+        logger.info("Initializing raw asyncpg connection pool...")
+        # Create explicit SSL context
+        ssl_ctx = create_ssl_context()
+        
+        POOL = await asyncpg.create_pool(
+            raw_url,
+            min_size=1,
+            max_size=10,
+            ssl=ssl_ctx # Pass the context here!
+        )
+        
+        # 2. SETUP ORM ENGINE (SQLAlchemy)
         orm_url = db_url
         if orm_url.startswith("postgresql://"):
             orm_url = orm_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         
         logger.info(f"Connecting to ORM via: {orm_url.split('@')[-1]}")
         
+        # SQLAlchemy needs 'connect_args' to pass SSL settings to the underlying driver
         engine = create_async_engine(
             orm_url,
             echo=False,
             pool_pre_ping=True,
             pool_size=10,
-            max_overflow=20
+            max_overflow=20,
+            connect_args={"ssl": ssl_ctx} 
         )
         
         async_session = async_sessionmaker(
             engine,
             class_=AsyncSession,
             expire_on_commit=False
-        )
-        
-        # 2. SETUP RAW POOL (asyncpg)
-        # We need the raw URL (postgresql://) not the sqlalchemy one (postgresql+asyncpg://)
-        raw_url = db_url.replace("+asyncpg", "")
-        logger.info("Initializing raw asyncpg connection pool...")
-        POOL = await asyncpg.create_pool(
-            raw_url,
-            min_size=1,
-            max_size=10
         )
         
         # 3. CREATE TABLES
@@ -226,6 +244,9 @@ async def init_database():
         
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
+        # Log stack trace for easier debugging
+        import traceback
+        traceback.print_exc()
         raise
 
 @asynccontextmanager
