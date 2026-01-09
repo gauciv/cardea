@@ -12,8 +12,15 @@ interface ThreatOverviewProps {
   isConnected: boolean;
 }
 
+// FIX: Use 'unknown' instead of 'any' to satisfy ESLint
+const safeEntries = (obj: unknown): [string, number][] => {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.entries(obj as Record<string, number>);
+};
+
 // Source type icons
-const sourceIcons: Record<string, React.ElementType> = {
+// FIX: Use { className?: string } instead of 'any' to satisfy ESLint
+const sourceIcons: Record<string, React.ElementType<{ className?: string }>> = {
   suricata: Shield,
   zeek: Eye,
   kitnet: Activity,
@@ -39,9 +46,6 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
   severityStats, 
   isConnected 
 }) => {
-  // FIX: Create a strictly typed local reference to prevent 'never' inference errors
-  const safeSeverityStats = (severityStats || {}) as Record<string, number>;
-
   // Calculate stats from alerts
   const stats = useMemo(() => {
     if (!alerts || alerts.length === 0) {
@@ -107,9 +111,10 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
       });
 
       const highestSeverity = hourAlerts.reduce((acc, a) => {
-        const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+        // FIX: Explicitly type the order object
+        const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
         const current = severityOrder[a.severity] || 0;
-        const best = severityOrder[acc as keyof typeof severityOrder] || 0;
+        const best = severityOrder[acc] || 0;
         return current > best ? a.severity : acc;
       }, 'low');
 
@@ -209,7 +214,8 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             {stats.recentTimeline.map((hour, i) => {
               const maxCount = Math.max(...stats.recentTimeline.map(h => h.count), 1);
               const height = hour.count > 0 ? Math.max((hour.count / maxCount) * 100, 10) : 5;
-              const barColor = severityColors[hour.severity] || 'bg-slate-700';
+              // FIX: Cast string key to valid color key
+              const barColor = severityColors[hour.severity as keyof typeof severityColors] || 'bg-slate-700';
               
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
@@ -289,15 +295,16 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             <span>Severity Distribution</span>
           </div>
           <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-800">
-            {/* FIX: Use safeSeverityStats */}
-            {Object.entries(safeSeverityStats).map(([severity, count]) => {
-              const total = Object.values(safeSeverityStats).reduce((a, b) => a + b, 0);
+            {/* FIX: Use safeEntries helper function */}
+            {safeEntries(severityStats).map(([severity, count]) => {
+              const total = Object.values(severityStats).reduce((a, b) => a + b, 0);
               const percentage = total > 0 ? (count / total) * 100 : 0;
               if (percentage === 0) return null;
               return (
                 <div
                   key={severity}
-                  className={`${severityColors[severity]} transition-all duration-500`}
+                  // FIX: Cast string key to valid color key to fix error TS2322
+                  className={`${severityColors[severity as keyof typeof severityColors]} transition-all duration-500`}
                   style={{ width: `${percentage}%` }}
                   title={`${severity}: ${count} (${percentage.toFixed(1)}%)`}
                 />
@@ -305,10 +312,11 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             })}
           </div>
           <div className="flex justify-between text-[8px] text-slate-600 uppercase">
-            {/* FIX: Use safeSeverityStats */}
-            {Object.entries(safeSeverityStats).map(([severity, count]) => (
+            {/* FIX: Use safeEntries helper function */}
+            {safeEntries(severityStats).map(([severity, count]) => (
               <span key={severity} className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${severityColors[severity]}`} />
+                {/* FIX: Cast string key to valid color key */}
+                <span className={`w-1.5 h-1.5 rounded-full ${severityColors[severity as keyof typeof severityColors]}`} />
                 {severity}: {count}
               </span>
             ))}

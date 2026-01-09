@@ -26,6 +26,12 @@ import { useAuth } from "./lib/useAuth";
 // Use environment variable or default to localhost for development
 const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
 
+// FIX: Use 'unknown' instead of 'any' to satisfy ESLint rules
+const safeEntries = (obj: unknown): [string, number][] => {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.entries(obj as Record<string, number>);
+};
+
 // Severity color/icon mapping
 const severityConfig = {
   critical: {
@@ -93,7 +99,7 @@ const Toast: React.FC<{
       className={`fixed bottom-6 right-6 z-50 ${config.bg} border rounded-lg shadow-2xl p-4 max-w-md animate-in slide-in-from-bottom-4 fade-in duration-300`}
     >
       <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 ${config.iconColor} shrink-0 mt-0.5`} />
+        <Icon className={`w-5 h-5 ${selectedConfig.iconColor} shrink-0 mt-0.5`} />
         <div className="flex-1">
           <p className="text-sm text-slate-200 font-medium">{message}</p>
           {type === "error" && (
@@ -369,11 +375,10 @@ const AIInsightCard: React.FC<{
 };
 
 // Empty State Component
-const EmptyState: React.FC<{
-  title: string;
-  description: string;
-  icon?: React.ElementType;
-}> = ({ title, description, icon: Icon = AlertCircle }) => (
+// FIX: Use { className?: string } instead of 'any'
+const EmptyState: React.FC<{ title: string; description: string; icon?: React.ElementType<{ className?: string }> }> = ({ 
+  title, description, icon: Icon = AlertCircle 
+}) => (
   <div className="flex flex-col items-center justify-center py-16 px-8">
     <div className="p-4 bg-slate-900/50 rounded-2xl mb-4">
       <Icon className="w-12 h-12 text-slate-600" />
@@ -521,6 +526,11 @@ const App: React.FC = () => {
     },
     [fetchData]
   );
+  // FIX: Explicitly type this as Record<string, number> so we don't need 'as any' later
+  const severityStats: Record<string, number> = data?.alerts_by_severity || {};
+  // FIX: Access properties using bracket notation or strict typing to avoid 'any'
+  const criticalCount = severityStats['critical'] || 0;
+  const highCount = severityStats['high'] || 0;
 
   // Render loading state while checking auth
   if (authLoading) {
@@ -762,27 +772,17 @@ const App: React.FC = () => {
                       </p>
                       {Object.keys(severityStats).length > 0 && (
                         <div className="flex gap-3 mt-4">
-                          {Object.entries(severityStats).map(
-                            ([severity, count]) => {
-                              const config =
-                                severityConfig[
-                                  severity as keyof typeof severityConfig
-                                ] || severityConfig.low;
-                              return (
-                                <div
-                                  key={severity}
-                                  className={`flex items-center gap-1 text-[9px] ${config.color}`}
-                                >
-                                  <span className="font-bold">
-                                    {count as number}
-                                  </span>
-                                  <span className="uppercase opacity-70">
-                                    {severity}
-                                  </span>
-                                </div>
-                              );
-                            }
-                          )}
+                          {/* FIX: Use safeEntries helper */}
+                          {safeEntries(severityStats).map(([severity, count]) => {
+                            // FIX: Cast string key to valid config key
+                            const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
+                            return (
+                              <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
+                                <span className="font-bold">{count}</span>
+                                <span className="uppercase opacity-70">{severity}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </>
@@ -838,8 +838,8 @@ const App: React.FC = () => {
                       </tr>
                     ) : data?.alerts && data.alerts.length > 0 ? (
                       data.alerts.map((alert: Alert) => {
-                        const config =
-                          severityConfig[alert.severity] || severityConfig.low;
+                        // FIX: Cast string key to valid config key
+                        const config = severityConfig[alert.severity as keyof typeof severityConfig] || severityConfig.low;
                         const SeverityIcon = config.icon;
                         return (
                           <tr
