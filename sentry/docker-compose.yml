@@ -81,6 +81,8 @@ services:
       context: ./bridge
       dockerfile: Dockerfile
     container_name: cardea-bridge
+    # Run as current user to allow writing to mounted volumes
+    user: "${UID:-1000}:${GID:-1000}"
     ports:
       - "8001:8001"
     volumes:
@@ -98,8 +100,11 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://cardea-oracle:8000/api/alerts}
       - ORACLE_API_KEY=${ORACLE_API_KEY:-}
-      - SENTRY_ID=${SENTRY_ID:-sentry_001}
+      # Remove default SENTRY_ID to enable Setup Mode (comment out to test pairing flow)
+      - SENTRY_ID=${SENTRY_ID:-}
       - ALERT_THRESHOLD=${ALERT_THRESHOLD:-0.95}
+      - DEV_MODE=${DEV_MODE:-true}
+      - DASHBOARD_URL=${DASHBOARD_URL:-https://cardea.azurewebsites.net}
     networks:
       - sentry-network
     restart: unless-stopped

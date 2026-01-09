@@ -4,6 +4,10 @@ SQLAlchemy models for Oracle backend data persistence (Async PostgreSQL optimize
 """
 
 import logging
+import os
+import ssl
+import asyncpg
+from urllib.parse import urlparse, urlunparse
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -17,11 +21,14 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    Boolean,
+    Enum as SQLEnum
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from config import settings
+from models import DeviceStatus, DeviceType
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +39,82 @@ class Base(DeclarativeBase):
 # Database engine and session globals
 engine = None
 async_session = None
+POOL = None  # Global raw connection pool
 
 # --- Models ---
+
+class User(Base):
+    """User account model"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=True)
+    full_name = Column(String(200), nullable=True)
+    
+    is_active = Column(Boolean, default=True)
+    roles = Column(JSON, default=list)
+    
+    # Auth & Security
+    email_verified = Column(Boolean, default=False)
+    email_verification_token = Column(String(100), nullable=True)
+    email_verification_expires = Column(DateTime(timezone=True), nullable=True)
+    
+    password_reset_token = Column(String(100), nullable=True)
+    password_reset_expires = Column(DateTime(timezone=True), nullable=True)
+    last_password_change = Column(DateTime(timezone=True), nullable=True)
+    
+    failed_login_attempts = Column(Integer, default=0)
+    is_locked = Column(Boolean, default=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    # Azure AD / OAuth mapping
+    oauth_provider_id = Column(String(100), nullable=True, index=True)
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    alerts = relationship("Alert", back_populates="user")
+    devices = relationship("Device", back_populates="user")
+
+
+class Device(Base):
+    """IoT Sentry Device model"""
+    __tablename__ = "devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Identity
+    hardware_id = Column(String(100), unique=True, index=True, nullable=False, doc="Immutable Machine ID from Raspberry Pi")
+    friendly_name = Column(String(100), nullable=True)
+    
+    # Status
+    status = Column(SQLEnum(DeviceStatus), default=DeviceStatus.UNCLAIMED, nullable=False)
+    device_type = Column(SQLEnum(DeviceType), default=DeviceType.SENTRY_PI, nullable=False)
+    version = Column(String(20), default="1.0.0")
+    
+    # Security & Claiming
+    claim_token = Column(String(100), nullable=True, index=True, doc="Token displayed on Sentry local portal for claiming")
+    api_key = Column(String(100), unique=True, nullable=True, doc="Generated after claiming for API auth")
+    public_key = Column(Text, nullable=True, doc="For E2E encryption")
+    
+    # Connectivity
+    last_seen = Column(DateTime(timezone=True), nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    
+    # Ownership
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user = relationship("User", back_populates="devices")
+    
+    # Data
+    alerts = relationship("Alert", back_populates="device")
+    
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
 
 class Alert(Base):
     """Alert data model"""
@@ -46,7 +127,6 @@ class Alert(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=False)
     
-    # Note: using timezone-aware defaults is better for Cloud/Azure deployments
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     processed_at = Column(DateTime(timezone=True), nullable=True)
@@ -59,16 +139,21 @@ class Alert(Base):
     correlations = Column(JSON, nullable=True)
     indicators = Column(JSON, nullable=True)
     
-    # Multi-tenancy: User who owns this alert (null = system/shared)
+    # User who owns this alert (Legacy/Direct)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
+    user = relationship("User", back_populates="alerts")
     
+    # Device that generated this alert
+    device_id = Column(Integer, ForeignKey('devices.id', ondelete='SET NULL'), nullable=True, index=True)
+    device = relationship("Device", back_populates="alerts")
+    
+    threat_intel_id = Column(Integer, ForeignKey("threat_intelligence.id"), nullable=True)
     threat_intel = relationship("ThreatIntelligence", back_populates="alerts")
     
     __table_args__ = (
         Index('idx_alerts_timestamp_severity', 'timestamp', 'severity'),
         Index('idx_alerts_source_type', 'source', 'alert_type'),
         Index('idx_alerts_threat_score', 'threat_score'),
-        Index('idx_alerts_user_id', 'user_id'),
     )
 
 class ThreatIntelligence(Base):
@@ -92,57 +177,101 @@ class ThreatIntelligence(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
-    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=True)
     alerts = relationship("Alert", back_populates="threat_intel")
-
-# (SystemMetrics, User, AlertCorrelation remain largely same, 
-# just ensure DateTime(timezone=True) is used for consistency)
 
 # --- Connection Management ---
 
+def create_ssl_context():
+    """Create a safe SSL context for Azure PostgreSQL"""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # Accept Azure's cert without strictly verifying chain
+    return ctx
+
 async def init_database():
-    """Initialize database connection and create tables"""
-    global engine, async_session
+    """Initialize database connection (ORM and Raw Pool) and create tables"""
+    global engine, async_session, POOL
     
     try:
         db_url = settings.DATABASE_URL
         
-        # 1. ENFORCE ASYNC DRIVER: PostgreSQL requires +asyncpg for async SQLAlchemy
-        if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # 1. SETUP RAW POOL (asyncpg)
+        logger.info("Initializing raw asyncpg connection pool...")
         
-        logger.info(f"Connecting to database via: {db_url.split('@')[-1]}") # Log endpoint only for security
+        # Parse URL to strip ALL query parameters (like sslmode=require)
+        parsed = urlparse(db_url)
+        clean_url = urlunparse(("postgresql", parsed.netloc, parsed.path, "", "", ""))
         
-        # 2. CREATE ENGINE
-        engine = create_async_engine(
-            db_url,
-            echo=False, # Set to True for SQL debugging
-            pool_pre_ping=True,
-            pool_size=10,
-            max_overflow=20
+        ssl_ctx = create_ssl_context()
+        
+        POOL = await asyncpg.create_pool(
+            clean_url,
+            min_size=1,
+            max_size=10,
+            ssl=ssl_ctx
         )
         
-        # 3. CREATE SESSION FACTORY
+        # --- CRITICAL FIX: SCHEMA PATCHING (AUTO-HEAL) ---
+        # This block ensures column alignment to prevent UndefinedColumnError
+        logger.info("🛠️ Running Schema Patch (Auto-Healing)...")
+        async with POOL.acquire() as conn:
+            try:
+                # Add missing Alert columns if necessary
+                await conn.execute("""
+                    ALTER TABLE alerts 
+                    ADD COLUMN IF NOT EXISTS device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL;
+                """)
+                await conn.execute("""
+                    ALTER TABLE alerts 
+                    ADD COLUMN IF NOT EXISTS threat_intel_id INTEGER REFERENCES threat_intelligence(id);
+                """)
+                
+                # Add friendly_name to devices if missing (Aligns 'name' vs 'friendly_name')
+                await conn.execute("""
+                    ALTER TABLE devices 
+                    ADD COLUMN IF NOT EXISTS friendly_name VARCHAR(100);
+                """)
+                logger.info("✅ Schema patch applied successfully.")
+            except Exception as e:
+                logger.warning(f"⚠️ Schema patch warning: {e}")
+
+        # 2. SETUP ORM ENGINE (SQLAlchemy)
+        orm_url = db_url
+        if orm_url.startswith("postgresql://"):
+            orm_url = orm_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        
+        logger.info(f"Connecting to ORM via: {orm_url.split('@')[-1]}")
+        
+        engine = create_async_engine(
+            orm_url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=20,
+            connect_args={"ssl": ssl_ctx} 
+        )
+        
         async_session = async_sessionmaker(
             engine,
             class_=AsyncSession,
             expire_on_commit=False
         )
         
-        # 4. SYNC TO ASYNC TABLE CREATION
+        # 3. CREATE TABLES
         async with engine.begin() as conn:
-            # We must use run_sync for Base.metadata operations
             await conn.run_sync(Base.metadata.create_all)
         
         logger.info("✅ Database schemas synced and connection ready.")
         
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 @asynccontextmanager
 async def get_db():
-    """FastAPI Dependency - Database session context manager"""
+    """FastAPI Dependency - ORM Session"""
     if async_session is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
     
@@ -156,9 +285,22 @@ async def get_db():
         finally:
             await session.close()
 
+async def get_db_connection():
+    """Returns a raw asyncpg connection from the pool."""
+    global POOL
+    if POOL is None:
+        await init_database()
+    
+    if POOL is None:
+        raise RuntimeError("Database pool failed to initialize")
+        
+    return await POOL.acquire()
+
 async def close_database():
     """Graceful shutdown for database connections"""
-    global engine
+    global engine, POOL
     if engine:
         await engine.dispose()
-        logger.info("Database connection pool closed.")
+    if POOL:
+        await POOL.close()
+    logger.info("Database connection pools closed.")

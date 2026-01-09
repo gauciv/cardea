@@ -3,6 +3,19 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // ============================================
+// HELPER: Deterministic Random Number Generator
+// ============================================
+// This ensures that for the same "seed", we get the exact same sequence of random numbers.
+// This satisfies the React Purity rule.
+const createSeededRandom = (seed: number) => {
+  let value = seed;
+  return () => {
+    value = (value * 9301 + 49297) % 233280;
+    return value / 233280;
+  };
+};
+
+// ============================================
 // ATMOSPHERIC PARTICLES
 // Floating dust and energy particles for enhanced space atmosphere
 // ============================================
@@ -80,6 +93,9 @@ export default function AtmosphericParticles({
   const count = Math.floor(500 * density);
   
   const { positions, scales, speeds, velocities } = useMemo(() => {
+    // Initialize the deterministic random generator with a fixed seed
+    const rng = createSeededRandom(12345);
+
     const positions = new Float32Array(count * 3);
     const scales = new Float32Array(count);
     const speeds = new Float32Array(count);
@@ -88,18 +104,18 @@ export default function AtmosphericParticles({
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
       
-      // Distribute in 3D space
-      positions[i3] = (Math.random() - 0.5) * 100;
-      positions[i3 + 1] = (Math.random() - 0.5) * 60;
-      positions[i3 + 2] = (Math.random() - 0.5) * 80;
+      // Distribute in 3D space using rng() instead of Math.random()
+      positions[i3] = (rng() - 0.5) * 100;
+      positions[i3 + 1] = (rng() - 0.5) * 60;
+      positions[i3 + 2] = (rng() - 0.5) * 80;
       
-      scales[i] = 0.3 + Math.random() * 0.7;
-      speeds[i] = 0.1 + Math.random() * 0.2;
+      scales[i] = 0.3 + rng() * 0.7;
+      speeds[i] = 0.1 + rng() * 0.2;
       
       // Slow drifting velocities
-      velocities[i3] = (Math.random() - 0.5) * 2;
-      velocities[i3 + 1] = (Math.random() - 0.5) * 1.5;
-      velocities[i3 + 2] = (Math.random() - 0.5) * 2;
+      velocities[i3] = (rng() - 0.5) * 2;
+      velocities[i3 + 1] = (rng() - 0.5) * 1.5;
+      velocities[i3 + 2] = (rng() - 0.5) * 2;
     }
     
     return { positions, scales, speeds, velocities };
@@ -133,7 +149,7 @@ export default function AtmosphericParticles({
           uOpacity: { value: opacity },
         }}
         transparent
-        blending={THREE.NormalBlending} // Changed from Additive
+        blending={THREE.NormalBlending}
         depthWrite={false}
       />
     </points>

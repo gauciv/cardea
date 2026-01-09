@@ -10,8 +10,12 @@ Now includes:
 """
 
 import asyncio
+import json
 import logging
 import os
+import random
+import string
+import uuid
 import httpx
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,8 +31,14 @@ from fastapi.templating import Jinja2Templates
 import uvicorn
 from pydantic import BaseModel
 
+from oracle_client import OracleClient
+
 # Import Zeek Notice Monitor
 from zeek_notice_monitor import get_notice_monitor
+
+ORACLE_URL = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000") # Base URL
+DATA_DIR = Path("/app/data")
+CONFIG_FILE = DATA_DIR / "sentry_config.json"
 
 # --- PLATFORM DETECTION LOGIC (PRESERVED) ---
 
@@ -241,6 +251,29 @@ class BridgeService:
             self.platform_detector = EnhancedPlatformDetector()
         except Exception:
             self.platform_detector = BasicPlatformDetector()
+        
+        # --- IDENTITY & SETUP ---
+        # Get unique persistent hardware ID (e.g. "pi-10000000abc")
+        self.hardware_id = self._get_hardware_id()
+        self.oracle_client = OracleClient(ORACLE_URL)
+        
+        # Load Configuration
+        self.config_path = CONFIG_FILE
+        self._config = self._load_configuration()
+        
+        # Determine Identity: Use config if saved, else hardware ID
+        self.sentry_id = self._config.get("sentry_id", self.hardware_id)
+        self.api_key = self._config.get("api_key")
+        
+        # Setup Mode State
+        self.is_setup_mode = self.api_key is None
+        self.claim_token = None # Will be populated by Oracle registration
+        
+        if self.is_setup_mode:
+            logger.warning(f"⚠️ SETUP MODE: Sentry {self.hardware_id} waiting for claim...")
+        else:
+            logger.info(f"✅ Sentry Online: {self.sentry_id}")
+            self.oracle_client.update_api_key(self.api_key)
             
         self.alerts: list[Alert] = []
         self.services_status: dict[str, dict[str, Any]] = {}
@@ -252,13 +285,13 @@ class BridgeService:
             "start_time": datetime.now()
         }
         
-        # Suricata-specific statistics
+        # Initialize stats containers
         self.suricata_stats = {
             "alerts_received": 0,
             "by_severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
             "by_category": {},
-            "recent_signatures": [],  # Last 20 unique signatures
-            "mitre_techniques": {},   # Count by MITRE technique
+            "recent_signatures": [],
+            "mitre_techniques": {},
         }
 
         self.data_paths = {
@@ -268,12 +301,100 @@ class BridgeService:
             "bridge": Path("/app/data")
         }
         self._setup_data_paths()
+    
+    def _get_hardware_id(self) -> str:
+        """Get persistent unique hardware ID (CPU Serial or UUID)"""
+        # 1. Try Raspberry Pi Serial
+        try:
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if line.startswith("Serial"):
+                        serial = line.split(":")[1].strip()
+                        if serial != "0000000000000000": return f"pi-{serial}"
+        except Exception: pass
+            
+        # 2. Try Linux Machine ID
+        try:
+            with open("/etc/machine-id", "r") as f: return f"linux-{f.read().strip()}"
+        except Exception: pass
+            
+        # 3. Fallback: Generated/Stored UUID
+        uuid_file = DATA_DIR / "hardware_id"
+        if uuid_file.exists(): return uuid_file.read_text().strip()
+        
+        new_id = f"sentry-{uuid.uuid4().hex[:12]}"
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            uuid_file.write_text(new_id)
+        except Exception: pass
+        return new_id
+
+    def _load_configuration(self) -> dict[str, Any]:
+        """Load saved config from JSON file"""
+        if self.config_path.exists():
+            try:
+                return json.loads(self.config_path.read_text())
+            except Exception as e:
+                logger.warning(f"Config load error: {e}")
+        return {}
+    
+    async def register_with_oracle(self):
+        """Poll Oracle to register device and keep Claim Token fresh"""
+        if not self.is_setup_mode: return
+
+        try:
+            # Register using the method added to OracleClient
+            response = await self.oracle_client.register_device(self.hardware_id)
+            if response.get("status") in ("created", "registered"):
+                self.claim_token = response.get("claim_token")
+                logger.info(f"🔑 Claim Token: {self.claim_token}")
+        except Exception as e:
+            logger.error(f"Registration poll failed: {e}")
+
+    async def _poll_registration_status(self):
+        """Background loop for Setup Mode"""
+        while self.is_setup_mode:
+            await self.register_with_oracle()
+            await asyncio.sleep(10)
+
+    def save_configuration(self, api_key: str):
+        """Complete setup by saving the API Key"""
+        try:
+            config = {
+                "sentry_id": self.hardware_id,
+                "api_key": api_key,
+                "configured_at": datetime.now(timezone.utc).isoformat()
+            }
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            self.config_path.write_text(json.dumps(config, indent=2))
+            
+            self.api_key = api_key
+            self.oracle_client.update_api_key(api_key)
+            self.is_setup_mode = False
+            self.claim_token = None
+            return True
+        except Exception as e:
+            logger.error(f"Config save failed: {e}")
+            return False
+
+    def get_setup_status(self) -> dict[str, Any]:
+        """Return status for the Local UI"""
+        if not self.is_setup_mode:
+            return {"configured": True, "sentry_id": self.sentry_id}
+        
+        return {
+            "configured": False,
+            "hardware_id": self.hardware_id,
+            "claim_token": self.claim_token or "Connecting...",
+            "oracle_url": ORACLE_URL
+        }
         
     def _setup_data_paths(self):
         for service, path in self.data_paths.items():
             try:
                 path.mkdir(parents=True, exist_ok=True)
             except Exception:
+                # Fallback to tmp if permissions fail
                 self.data_paths[service] = Path(f"/tmp/cardea/{service}")
                 self.data_paths[service].mkdir(parents=True, exist_ok=True)
 
@@ -305,18 +426,19 @@ class BridgeService:
         links = []
         
         # Sentry Gateway
-        sentry_status = "online" # Placeholder for live check
+        sentry_status = "online" 
         devices.append({
-            "id": "sentry", "name": "X230-ARCH [GATEWAY]", 
+            "id": "sentry", "name": f"Sentry [{self.hardware_id[:6]}]", 
             "role": "sentry", "status": sentry_status, "ip": "192.168.1.1"
         })
 
         # Oracle Link
+        oracle_status = "online" if self.oracle_client.last_successful_ping else "offline"
         devices.append({
-            "id": "oracle", "name": "AZURE-ORACLE", 
-            "role": "cloud", "status": "online", "ip": "Cloud Endpoint"
+            "id": "oracle", "name": "ORACLE CLOUD", 
+            "role": "cloud", "status": oracle_status, "ip": "Azure Endpoint"
         })
-        links.append({"source": "oracle", "target": "sentry", "active": True})
+        links.append({"source": "oracle", "target": "sentry", "active": oracle_status == "online"})
 
         # Discover Assets from Zeek conn.log
         try:
@@ -376,22 +498,23 @@ zeek_notice_monitor = get_notice_monitor(handle_zeek_notice_alert)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🌉 Bridge Service Online [X230-ARCH]")
+    logger.info(f"🌉 Bridge Service Online [ID: {bridge_service.hardware_id}]")
     
-    # Start Zeek notice monitoring in background
+    # Start Zeek notice monitoring
     notice_task = asyncio.create_task(zeek_notice_monitor.start())
-    logger.info("🔔 Zeek Notice Monitor started")
+    
+    # Start Registration Polling ONLY if in setup mode
+    reg_task = None
+    if bridge_service.is_setup_mode:
+        reg_task = asyncio.create_task(bridge_service._poll_registration_status())
     
     yield
     
     # Cleanup
     await zeek_notice_monitor.stop()
     notice_task.cancel()
-    try:
-        await notice_task
-    except asyncio.CancelledError:
-        # Expected during shutdown - task cancellation is intentional
-        pass
+    if reg_task: reg_task.cancel()
+    await bridge_service.oracle_client.close()
 
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="src/templates")
@@ -612,6 +735,107 @@ async def get_zeek_notice_stats():
         "last_check": datetime.now().isoformat()
     }
 
+# --- SETUP MODE / DEVICE AUTHORIZATION ENDPOINTS ---
+
+class PairingClaimRequest(BaseModel):
+    """Request body for claiming/simulating pairing"""
+    code: str
+
+@app.get("/api/setup/status")
+async def get_setup_status():
+    """
+    Returns the current setup status.
+    Used by the UI to determine if setup overlay should be shown.
+    """
+    return bridge_service.get_setup_status()
+
+@app.post("/api/setup/simulate_claim")
+async def simulate_claim(request: PairingClaimRequest):
+    """
+    TEMPORARY: Simulates the Oracle claim process for testing.
+    In production, this would be handled by the Oracle backend.
+    
+    Accepts the pairing code and if it matches, generates fake credentials.
+    """
+    if not bridge_service.is_setup_mode:
+        raise HTTPException(
+            status_code=400, 
+            detail="Sentry is already configured"
+        )
+    
+    # Normalize input code (strip whitespace, uppercase)
+    input_code = request.code.strip().upper()
+    
+    if input_code != bridge_service.pairing_code:
+        logger.warning(f"⚠️ Invalid pairing attempt: {input_code}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid pairing code"
+        )
+    
+    # Generate simulated credentials (In production, Oracle provides these)
+    sentry_id = f"sentry-{uuid.uuid4().hex[:8]}"
+    api_key = f"sk-{uuid.uuid4().hex}"
+    
+    if bridge_service.complete_pairing(sentry_id, api_key):
+        logger.info(f"🎉 Simulated pairing successful: {sentry_id}")
+        return {
+            "status": "success",
+            "sentry_id": sentry_id,
+            "message": "Sentry is now configured and ready"
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save configuration"
+        )
+
+@app.post("/api/setup/reset")
+async def reset_setup():
+    """
+    DEV ONLY: Resets the sentry to setup mode.
+    Deletes the config file and regenerates a pairing code.
+    """
+    if os.getenv("DEV_MODE", "false").lower() != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Reset only available in dev mode"
+        )
+    
+    try:
+        if bridge_service.config_path.exists():
+            bridge_service.config_path.unlink()
+        
+        bridge_service.sentry_id = None
+        bridge_service.api_key = None
+        bridge_service.is_setup_mode = True
+        bridge_service._generate_pairing_code()
+        
+        logger.info("🔄 Sentry reset to setup mode")
+        return {"status": "reset", "code": bridge_service.pairing_code}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- END SETUP MODE ENDPOINTS ---
+
 if __name__ == "__main__":
     port = int(os.getenv("BRIDGE_PORT", "8001"))
     uvicorn.run("bridge_service:app", host="0.0.0.0", port=port, reload=True)
+
+    @app.post("/api/setup/complete")
+async def complete_setup(data: dict):
+    """
+    Called by local UI when user pastes the API Key generated by the Dashboard.
+    """
+    api_key = data.get("api_key")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API Key required")
+    
+    if bridge_service.save_configuration(api_key):
+        return {"status": "success", "message": "Sentry is now Online!"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save configuration")
+
+@app.get("/api/setup/status")
+async def get_setup_status_api():
+    return bridge_service.get_setup_status()

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'dashboard/**'
+      - '.github/workflows/deploy-dashboard.yml'
   workflow_dispatch:
 
 jobs:
@@ -13,9 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy
     permissions:
-      id-token: write
       contents: read
-      pull-requests: write
 
     steps:
       - name: Checkout Code
@@ -34,20 +33,18 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
-      # THIS IS THE CRITICAL DEBUGGING STEP
-      - name: Build Project & Debug
+      - name: Build Project
         working-directory: dashboard
         run: |
           npm run build
         env:
-          VITE_ORACLE_URL: ${{ vars.ORACLE_URL }}
+          # REPLACE with your actual Container App URL
+          VITE_ORACLE_URL: "https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io"
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Get Fresh Deployment Token
         id: get_token
@@ -56,6 +53,12 @@ jobs:
           
           echo "🔹 Fetching token for Resource Group: $RG_NAME"
           SWA_NAME=$(az staticwebapp list --resource-group $RG_NAME --query "[0].name" -o tsv)
+          
+          if [ -z "$SWA_NAME" ]; then
+            echo "❌ No Static Web App found in $RG_NAME"
+            exit 1
+          fi
+          
           echo "🔹 Found App Name: $SWA_NAME"
           
           TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group $RG_NAME --query "properties.apiKey" -o tsv)
@@ -69,7 +72,8 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.get_token.outputs.token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
+          # FIX: Point directly to the build artifact folder
           app_location: "dashboard/dist" 
-          api_location: "" 
+          # FIX: Clear output_location since we are pointing directly to dist
           output_location: "" 
           skip_app_build: true

@@ -12,13 +12,31 @@ from typing import Any, Optional
 
 from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
+from fastapi import APIRouter, Query
+from sqlalchemy import select, and_, func
 
-from config import settings
-from database import Alert, get_db
-from models import AlertSeverity, AlertType, ThreatInfo
-from search_service import ThreatIntelligenceSearch
+import sys
+from pathlib import Path
 
+# Add the parent directory (src) to sys.path if not present
+current_dir = Path(__file__).resolve().parent
+parent_dir = current_dir.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+try:
+    from config import settings
+    from database import Alert, get_db
+    from models import AlertSeverity, AlertType, ThreatInfo
+    from search_service import ThreatIntelligenceSearch
+except ImportError:
+    # Fallback for some Docker environments
+    from src.config import settings
+    from src.database import Alert, get_db
+    from src.models import AlertSeverity, AlertType, ThreatInfo
+    from src.search_service import ThreatIntelligenceSearch
 logger = logging.getLogger(__name__)
+router = APIRouter()
 
 class ThreatAnalyzer:
     """Advanced threat analysis with AI-powered agentic reasoning and RAG"""
@@ -993,3 +1011,90 @@ class AlertCorrelator:
         
         return correlations
 
+# Initialize the Analyzer Global Instance
+analyzer = ThreatAnalyzer()
+
+@router.get("")
+async def get_analytics(time_range: str = Query("today", description="Time range for analysis")):
+    """
+    Dashboard Endpoint: Returns consolidated security stats.
+    Mapped to: GET /api/analytics
+    """
+    try:
+        # 1. Determine Time Window
+        seconds = 86400  # Default 24h
+        if time_range == "hour":
+            seconds = 3600
+        elif time_range == "week":
+            seconds = 604800
+
+        # 2. THE GATEKEEPER: Lightweight check for data before running heavy AI
+        async with get_db() as db:
+            # FIXED: 'func' must be imported from sqlalchemy at the top of the file
+            count_stmt = select(func.count()).select_from(Alert)
+            count_result = await db.execute(count_stmt)
+            total_in_db = count_result.scalar() or 0
+
+            # If no alerts exist, return immediately (Stops the "Reconnecting" lag)
+            if total_in_db == 0:
+                return {
+                    "total_alerts": 0,
+                    "risk_score": 0.0,
+                    "alerts_by_severity": {},
+                    "alerts": [],
+                    "ai_insight": {
+                        "summary": "Welcome to Cardea! Connect your first Sentry device to start AI threat monitoring.",
+                        "confidence": 1.0,
+                        "ai_powered": False,
+                        "technical_summary": "System idling. Awaiting telemetry."
+                    }
+                }
+
+            # 3. RUN ANALYSIS (Only if data exists)
+            # This prevents calling OpenAI on an empty dataset
+            analysis_result = await analyzer.analyze_threats(time_window=seconds)
+
+            # 4. FETCH DATA FOR DASHBOARD CHARTS
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(seconds=seconds)
+            
+            stmt = select(Alert).where(
+                and_(Alert.timestamp >= start_time, Alert.timestamp <= end_time)
+            ).order_by(Alert.timestamp.desc()).limit(50)
+            
+            result = await db.execute(stmt)
+            raw_alerts = result.scalars().all()
+            severity_counts = Counter([a.severity for a in raw_alerts])
+            
+        # 5. CONSTRUCT FINAL RESPONSE
+        return {
+            "total_alerts": len(raw_alerts),
+            "risk_score": analysis_result.get("risk_score", 0),
+            "alerts_by_severity": dict(severity_counts),
+            "alerts": raw_alerts,
+            "ai_insight": {
+                "summary": str(analysis_result.get("recommendations", ["System online. Monitoring active."])[0]),
+                "confidence": 0.85,
+                "ai_powered": analysis_result.get("ai_enhanced", False),
+                "technical_summary": f"Detected {len(analysis_result.get('threats', []))} active threat clusters."
+            }
+        }
+
+    except Exception as e:
+        # 6. SAFETY WRAPPER: Ensures CORS headers are sent even if the DB crashes
+        logger.error(f"❌ Analytics Endpoint Failure: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            "total_alerts": 0,
+            "risk_score": 0,
+            "alerts_by_severity": {},
+            "alerts": [],
+            "ai_insight": {
+                "summary": "Backend is warming up or reconnecting. Refreshing shortly...",
+                "confidence": 0,
+                "ai_powered": False,
+                "technical_summary": "Error handled gracefully to prevent dashboard crash."
+            }
+        }
