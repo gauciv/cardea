@@ -35,13 +35,16 @@ class DeviceClaimRequest(BaseModel):
     friendly_name: str
 
 class DeviceResponse(BaseModel):
-    id: str
+    id: int  # FIXED: Database uses integer primary key
     hardware_id: str
-    friendly_name: str  # FIXED: Matches database column name
+    friendly_name: Optional[str] = None  # FIXED: Can be NULL in database
     status: str
-    last_seen: Optional[datetime]
-    ip_address: Optional[str]
-    version: str
+    last_seen: Optional[datetime] = None
+    ip_address: Optional[str] = None
+    version: Optional[str] = "1.0.0"  # Default if missing
+    
+    class Config:
+        from_attributes = True  # Pydantic v2 - allows ORM objects
 
 # --- ENDPOINTS ---
 
@@ -196,15 +199,19 @@ async def claim_device(req: DeviceClaimRequest):
         if conn:
             await conn.close()
 
-@router.get("/list", response_model=List[DeviceResponse])
-async def list_devices():
+@router.get("/list")
+async def list_devices() -> List[dict]:
     """
     Called by Dashboard to show user's devices.
     Hardened to handle database drift and prevent 500 errors.
+    
+    NOTE: Returns raw dicts to avoid Pydantic validation issues with DB types.
     """
     conn = None
     try:
         conn = await get_db_connection()
+        logger.info("📋 Fetching device list...")
+        
         # FIXED: Querying 'friendly_name' instead of 'name'
         # Added NULLS LAST to ensure active devices appear at the top
         rows = await conn.fetch("""
@@ -212,7 +219,25 @@ async def list_devices():
             FROM devices 
             ORDER BY last_seen DESC NULLS LAST
         """)
-        return [dict(row) for row in rows]
+        
+        # Convert to list of dicts with proper type handling
+        devices = []
+        for row in rows:
+            device_name = row["friendly_name"] or "Unnamed Device"
+            devices.append({
+                "id": str(row["id"]),  # Convert to string for frontend compatibility
+                "hardware_id": row["hardware_id"] or "",
+                "friendly_name": device_name,  # For new frontend code
+                "name": device_name,  # COMPAT: Old frontend code uses 'name'
+                "status": (row["status"] or "unknown").lower(),  # Lowercase for frontend enum
+                "last_seen": row["last_seen"].isoformat() if row["last_seen"] else None,
+                "ip_address": row["ip_address"],
+                "version": row["version"] or "1.0.0"
+            })
+        
+        logger.info(f"✅ Found {len(devices)} devices")
+        return devices
+        
     except Exception as e:
         logger.error(f"❌ Device List Endpoint failed: {e}")
         traceback.print_exc()
