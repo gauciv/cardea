@@ -99,11 +99,15 @@ async def claim_device(req: DeviceClaimRequest):
     """
     Called by the Dashboard user to link a device to their account.
     
-    DEMO MODE: Accepts hardcoded "CARDEA" code and auto-creates a device.
+    DEMO MODE: Accepts hardcoded "SN7-K2M" code and auto-creates a device.
     PRODUCTION MODE: Requires device to be pre-registered with matching claim_token.
     """
-    conn = await get_db_connection()
+    logger.info(f"📱 Claim request received: code='{req.claim_token}', name='{req.friendly_name}'")
+    logger.info(f"🔧 DEMO_MODE={DEMO_MODE}, expected code='{DEMO_CLAIM_CODE}'")
+    
+    conn = None
     try:
+        conn = await get_db_connection()
         # Normalize input code (strip whitespace, uppercase)
         input_code = req.claim_token.strip().upper()
         
@@ -126,23 +130,26 @@ async def claim_device(req: DeviceClaimRequest):
                     "message": "Demo device already configured - returning existing API key"
                 }
             
-            # Create a new demo device
-            new_id = str(uuid.uuid4())
+            # Create a new demo device (let PostgreSQL auto-generate the ID)
             hardware_id = f"demo-{secrets.token_hex(6)}"
             api_key = f"sk-demo-{secrets.token_urlsafe(32)}"
+            friendly_name = req.friendly_name or "Demo Sentry"
             
-            await conn.execute(
+            # Insert and return the auto-generated ID
+            result = await conn.fetchrow(
                 """
-                INSERT INTO devices (id, hardware_id, friendly_name, status, api_key, version, last_seen)
-                VALUES ($1, $2, $3, 'online', $4, '1.0.0', NOW())
+                INSERT INTO devices (hardware_id, friendly_name, status, api_key, version, last_seen, created_at)
+                VALUES ($1, $2, 'online', $3, '1.0.0', NOW(), NOW())
+                RETURNING id
                 """,
-                new_id, hardware_id, req.friendly_name or "Demo Sentry", api_key
+                hardware_id, friendly_name, api_key
             )
             
-            logger.info(f"🎉 DEMO: Created demo device {hardware_id}")
+            new_id = result["id"] if result else "unknown"
+            logger.info(f"🎉 DEMO: Created demo device {hardware_id} with id={new_id}")
             return {
                 "success": True,
-                "device_id": new_id,
+                "device_id": str(new_id),
                 "api_key": api_key,
                 "message": "Demo device created successfully"
             }
@@ -179,8 +186,15 @@ async def claim_device(req: DeviceClaimRequest):
             "api_key": api_key,
             "message": "Device claimed successfully"
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Claim device failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to claim device: {str(e)}")
     finally:
-        await conn.close()
+        if conn:
+            await conn.close()
 
 @router.get("/list", response_model=List[DeviceResponse])
 async def list_devices():
