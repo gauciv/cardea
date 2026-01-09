@@ -152,7 +152,7 @@ const LoginPage: React.FC = () => {
       });
 
       const data = await response.json();
-
+// test
       if (response.ok) {
         localStorage.setItem("cardea_auth_token", data.access_token);
         localStorage.setItem("cardea_user", JSON.stringify(data.user));

@@ -2,7 +2,7 @@
 Alembic Migration Environment Configuration
 Configured for async PostgreSQL with SQLAlchemy 2.0
 """
-
+# test
 import asyncio
 from logging.config import fileConfig
 
