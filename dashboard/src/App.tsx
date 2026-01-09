@@ -21,8 +21,8 @@ const severityConfig = {
   low: { color: 'text-cyan-500', bg: 'bg-cyan-950/20 border-cyan-900/50', icon: Info },
 };
 
-// Typed default to fix build error
-const defaultSeverityStats: Record<string, number> = {};
+// FIX: Define this OUTSIDE the component to ensure strict typing
+const EMPTY_STATS: Record<string, number> = {};
 
 // Toast notification component
 const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 'success'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
@@ -292,7 +292,7 @@ const ConnectionStatus: React.FC<{ isConnected: boolean; isRetrying: boolean }> 
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Hook for redirection
 
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -304,6 +304,7 @@ const App: React.FC = () => {
   const [actionToast, setActionToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
 
+  // REDIRECT LOGIC: If done loading and not authenticated, go to login
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       navigate('/login');
@@ -372,11 +373,12 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  // FIX: Use the strictly typed default constant
-  const severityStats = data?.alerts_by_severity || defaultSeverityStats;
+  // FIX: Use the strictly typed constant here
+  const severityStats = data?.alerts_by_severity || EMPTY_STATS;
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
+  // Render loading state while checking auth
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -388,6 +390,7 @@ const App: React.FC = () => {
     );
   }
 
+  // If not authenticated, we return null because the useEffect above handles the redirect
   if (!isAuthenticated) return null;
 
   return (

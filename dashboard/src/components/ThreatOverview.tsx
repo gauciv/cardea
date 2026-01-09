@@ -34,12 +34,12 @@ const alertTypeLabels: Record<string, string> = {
   dos_attack: 'DoS Attack',
 };
 
-// Typed default to fix inference errors
-const defaultStats: Record<string, number> = {};
+// FIX: Define this constant to prevent 'never' inference on empty objects
+const EMPTY_STATS: Record<string, number> = {};
 
 export const ThreatOverview: React.FC<ThreatOverviewProps> = ({ 
   alerts, 
-  severityStats = defaultStats, 
+  severityStats = EMPTY_STATS, 
   isConnected 
 }) => {
   // Calculate stats from alerts
