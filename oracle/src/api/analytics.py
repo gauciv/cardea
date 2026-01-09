@@ -1015,6 +1015,7 @@ class AlertCorrelator:
 analyzer = ThreatAnalyzer()
 
 @router.get("")
+@router.get("")
 async def get_analytics(time_range: str = Query("today", description="Time range for analysis")):
     """
     Dashboard Endpoint: Returns consolidated security stats.
@@ -1027,36 +1028,50 @@ async def get_analytics(time_range: str = Query("today", description="Time range
     elif time_range == "week":
         seconds = 604800
 
-    # 2. Run your Advanced Analysis
-    # This runs your existing analyze_threats() logic
-    analysis_result = await analyzer.analyze_threats(time_window=seconds)
-
-    # 3. Fetch Raw Data for Dashboard Charts
-    # (We do a lightweight query here to ensure the dashboard charts have the exact data structure they need)
+    # This prevents the AI from running in an infinite loop on empty data
     async with get_db() as db:
+        count_stmt = select(func.count()).select_from(Alert)
+        count_result = await db.execute(count_stmt)
+        total_in_db = count_result.scalar() or 0
+
+        if total_in_db == 0:
+            return {
+                "total_alerts": 0,
+                "risk_score": 0.0,
+                "alerts_by_severity": {},
+                "alerts": [],
+                "ai_insight": {
+                    "summary": "Welcome to Cardea! No Sentry devices are sending data yet. Please connect your first device to begin analysis.",
+                    "confidence": 1.0,
+                    "ai_powered": False,
+                    "technical_summary": "System idling. Awaiting telemetry."
+                }
+            }
+
+        # 3. RUN ANALYSIS (Only if there is data)
+        analysis_result = await analyzer.analyze_threats(time_window=seconds)
+
+        # 4. FETCH DATA FOR CHARTS
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(seconds=seconds)
         
-        # Get raw alerts for the "Recent Events" table
         stmt = select(Alert).where(
             and_(Alert.timestamp >= start_time, Alert.timestamp <= end_time)
         ).order_by(Alert.timestamp.desc()).limit(50)
         
         result = await db.execute(stmt)
         raw_alerts = result.scalars().all()
-
-        # Calculate counts for the "Network Status" chart
         severity_counts = Counter([a.severity for a in raw_alerts])
         
-    # 4. Construct Response matching Dashboard 'AnalyticsResponse' interface
+    # 5. CONSTRUCT FINAL RESPONSE
+    # Use fallback values if analysis_result is empty
     return {
         "total_alerts": len(raw_alerts),
         "risk_score": analysis_result.get("risk_score", 0),
         "alerts_by_severity": dict(severity_counts),
         "alerts": raw_alerts,
         "ai_insight": {
-            # Take the first recommendation from your analysis as the summary
-            "summary": str(analysis_result.get("recommendations", ["Monitoring active. No critical anomalies detected."])[0]),
+            "summary": str(analysis_result.get("recommendations", ["System online. Monitoring active."])[0]),
             "confidence": 0.85,
             "ai_powered": analysis_result.get("ai_enhanced", False),
             "technical_summary": f"Detected {len(analysis_result.get('threats', []))} active threat clusters."
