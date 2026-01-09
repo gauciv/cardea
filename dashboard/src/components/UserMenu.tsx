@@ -4,7 +4,8 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, ChevronDown, Shield, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom'; // Import Link for navigation
+import { LogOut, ChevronDown, Shield, Settings, Server } from 'lucide-react'; // Added Server icon
 import { getDisplayName, logout, type UserInfo } from '../lib/auth';
 
 interface UserMenuProps {
@@ -57,7 +58,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
   };
 
   const handleLogout = () => {
-    // UPDATED: Redirect to Home Page ('/') instead of Login
     logout('/');
   };
 
@@ -118,6 +118,16 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
 
             {/* Divider */}
             <div className="my-1 border-t border-slate-800" />
+
+            {/* NEW: My Devices Link */}
+            <Link
+              to="/devices"
+              className="w-full px-4 py-2 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-cyan-400 transition-colors text-left"
+              onClick={() => setIsOpen(false)}
+            >
+              <Server className="w-4 h-4" />
+              <span className="text-xs font-medium">My Sentry Devices</span>
+            </Link>
 
             {/* Settings (placeholder) */}
             <button
