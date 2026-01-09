@@ -13,11 +13,26 @@ from typing import Any, Optional
 from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
 
-from config import settings
-from database import Alert, get_db
-from models import AlertSeverity, AlertType, ThreatInfo
-from search_service import ThreatIntelligenceSearch
+import sys
+from pathlib import Path
 
+# Add the parent directory (src) to sys.path if not present
+current_dir = Path(__file__).resolve().parent
+parent_dir = current_dir.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+try:
+    from config import settings
+    from database import Alert, get_db
+    from models import AlertSeverity, AlertType, ThreatInfo
+    from search_service import ThreatIntelligenceSearch
+except ImportError:
+    # Fallback for some Docker environments
+    from src.config import settings
+    from src.database import Alert, get_db
+    from src.models import AlertSeverity, AlertType, ThreatInfo
+    from src.search_service import ThreatIntelligenceSearch
 logger = logging.getLogger(__name__)
 
 class ThreatAnalyzer:
