@@ -22,3 +22,5 @@ pyyaml>=6.0
 
 # HTTP client (for sync calls)
 requests>=2.31.0
+
+aiohttp
