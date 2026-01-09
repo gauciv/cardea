@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -105,7 +105,7 @@ const Toast: React.FC<{
           <p className="text-sm text-slate-200 font-medium">{message}</p>
           {type === "error" && (
             <p className="text-xs text-slate-400 mt-1">
-              Automatic retry in progress...
+              Retrying connection...
             </p>
           )}
         </div>
@@ -376,6 +376,7 @@ const AIInsightCard: React.FC<{
 };
 
 // Empty State Component
+// FIX: Use { className?: string } instead of 'any'
 const EmptyState: React.FC<{
   title: string;
   description: string;
@@ -426,14 +427,17 @@ const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showToast, setShowToast] = useState<boolean>(false);
-  const [retryCount, setRetryCount] = useState<number>(0);
+  
+  // FIX: Use ref for retry counting to prevent re-render loops
+  const retryCountRef = useRef(0);
+  
   const [actionToast, setActionToast] = useState<{
     message: string;
     type: "success" | "error";
   } | null>(null);
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
 
-  // NEW: Track if user has devices
+  // Track if user has devices
   const [hasDevices, setHasDevices] = useState<boolean | null>(null);
 
   // REDIRECT LOGIC
@@ -452,7 +456,7 @@ const App: React.FC = () => {
       // 1. Fetch Analytics
       const res = await axios.get<AnalyticsResponse>(
         `${ORACLE_URL}/api/analytics?time_range=today`,
-        { timeout: 10000 }
+        { timeout: 8000 }
       );
       
       // 2. Fetch Devices Check
@@ -466,19 +470,24 @@ const App: React.FC = () => {
       setIsConnected(true);
       setLastUpdate(new Date());
       setShowToast(false);
-      setRetryCount(0);
+      
+      // Reset retry count on success
+      retryCountRef.current = 0;
     } catch (err) {
       console.error("Oracle API Error:", err);
       setIsConnected(false);
-      setRetryCount((prev) => prev + 1);
-      if (retryCount < 3) {
+      
+      // Increment ref instead of state
+      retryCountRef.current += 1;
+      
+      if (retryCountRef.current >= 3) {
         setError("Unable to connect to Cardea Oracle backend");
         setShowToast(true);
       }
     } finally {
       setIsLoading(false);
     }
-  }, [retryCount, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -611,7 +620,8 @@ const App: React.FC = () => {
               )}
               <ConnectionStatus
                 isConnected={isConnected}
-                isRetrying={!isConnected && retryCount > 0}
+                // Check if disconnected and retry count > 0 (using ref)
+                isRetrying={!isConnected && retryCountRef.current > 0}
               />
               {lastUpdate && isConnected && (
                 <span className="text-slate-600">
@@ -814,6 +824,7 @@ const App: React.FC = () => {
                           {Object.keys(severityStats).length > 0 && (
                             <div className="flex gap-3 mt-4">
                               {safeEntries(severityStats).map(([severity, count]) => {
+                                // FIX: Cast string key to valid config key
                                 const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
                                 return (
                                   <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
@@ -877,6 +888,7 @@ const App: React.FC = () => {
                           </tr>
                         ) : data?.alerts && data.alerts.length > 0 ? (
                           data.alerts.map((alert: Alert) => {
+                            // FIX: Cast string key to valid config key
                             const config = severityConfig[alert.severity as keyof typeof severityConfig] || severityConfig.low;
                             const SeverityIcon = config.icon;
                             return (
