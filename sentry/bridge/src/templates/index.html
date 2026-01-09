@@ -277,6 +277,17 @@
                         <span class="font-semibold text-white">{{ setup_status.connected_devices | default(1) }}</span> device
                     </span>
                 </div>
+                <!-- Reset Button (Demo Only) -->
+                {% if setup_status.configured %}
+                <button 
+                    onclick="resetDevice()" 
+                    class="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-orange-500/20 border border-slate-700 hover:border-orange-500/50 rounded-lg text-slate-400 hover:text-orange-400 transition-all text-sm"
+                    title="Unregister device for demo reset"
+                >
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Reset</span>
+                </button>
+                {% endif %}
                 <!-- Time -->
                 <div class="text-right">
                     <div class="text-[10px] text-slate-500 uppercase tracking-wider">System Time</div>
@@ -447,6 +458,32 @@
             if (successModal) {
                 successModal.classList.remove('hidden');
                 lucide.createIcons();
+            }
+        }
+
+        // Reset device function (for demo)
+        async function resetDevice() {
+            if (!confirm("Are you sure you want to unregister this device? It will return to setup mode and you'll need to pair it again.")) {
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/setup/reset', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    alert("Device unregistered successfully! The page will reload to show the setup screen.");
+                    window.location.reload();
+                } else {
+                    alert("Failed to reset: " + (data.detail || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Reset error:", err);
+                alert("Failed to reset device. Check console for details.");
             }
         }
 

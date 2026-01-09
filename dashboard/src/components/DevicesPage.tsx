@@ -169,7 +169,7 @@ export const DevicesPage = () => {
                     </div>
                     <div className="flex items-start gap-3">
                       <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold shrink-0">3</span>
-                      <p className="text-sm text-slate-300">Copy the pairing code (e.g., <code className="text-cyan-400 bg-slate-800 px-1.5 py-0.5 rounded text-xs">SN7-K2M</code>) and click below</p>
+                      <p className="text-sm text-slate-300">Copy the pairing code displayed on your Sentry device and click below</p>
                     </div>
                   </div>
                 </div>

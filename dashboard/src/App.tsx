@@ -638,74 +638,47 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-6">
         
-        {/* === NEW ONBOARDING STATE === */}
+        {/* === ONBOARDING STATE === */}
         {hasDevices === false && !isLoading ? (
-          <div className="bg-gradient-to-br from-slate-900/60 via-slate-900/40 to-cyan-950/20 border border-slate-800 rounded-2xl p-8 md:p-12 text-center relative overflow-hidden">
-            {/* Background decoration */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl" />
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-cyan-500/10 rounded-lg border border-cyan-500/20 flex items-center justify-center">
+                <Server className="w-6 h-6 text-cyan-400" />
+              </div>
+              <div className="text-left">
+                <h2 className="text-xl font-semibold text-white">No Devices Connected</h2>
+                <p className="text-sm text-slate-400">Connect a Sentry device to start monitoring</p>
+              </div>
             </div>
             
-            <div className="relative z-10 max-w-2xl mx-auto">
-              {/* Icon with animation */}
-              <div className="relative mb-8">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-28 h-28 bg-cyan-500/10 rounded-full animate-pulse" />
-                </div>
-                <div className="relative w-24 h-24 bg-gradient-to-br from-cyan-500/20 to-slate-900 rounded-2xl flex items-center justify-center mx-auto border border-cyan-500/30 shadow-2xl shadow-cyan-500/10">
-                  <Server className="w-12 h-12 text-cyan-400" />
-                </div>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="flex-1 h-px bg-slate-800"></div>
+              <span className="text-xs text-slate-600 px-2">Quick Setup</span>
+              <div className="flex-1 h-px bg-slate-800"></div>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-3 mb-6 text-xs text-slate-400">
+              <div className="flex flex-col items-center gap-1">
+                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">1</span>
+                <span className="text-center">Power on Sentry</span>
               </div>
-              
-              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Welcome to Cardea Oracle</h2>
-              <p className="text-slate-400 text-lg mb-8 leading-relaxed max-w-lg mx-auto">
-                Your AI-powered security dashboard is ready. Connect your <span className="text-cyan-400 font-semibold">Sentry device</span> to begin monitoring your network in real-time.
-              </p>
-              
-              {/* Quick setup steps */}
-              <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 mb-8 text-left max-w-md mx-auto">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Quick Setup</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-3 text-slate-300">
-                    <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">1</span>
-                    <span>Power on your Sentry device</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-300">
-                    <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">2</span>
-                    <span>Find the pairing code on Sentry's screen</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-300">
-                    <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">3</span>
-                    <span>Enter the code below to connect</span>
-                  </div>
-                </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">2</span>
+                <span className="text-center">Get pairing code</span>
               </div>
-              
-              <Link 
-                to="/devices" 
-                className="inline-flex items-center gap-3 bg-cyan-600 hover:bg-cyan-500 text-white px-10 py-4 rounded-xl font-bold text-lg transition-all shadow-xl shadow-cyan-900/30 hover:shadow-cyan-900/50 hover:scale-105"
-              >
-                <Plus className="w-6 h-6" />
-                Connect Sentry Device
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-              
-              <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-slate-500">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  <span>Real-time Network Monitoring</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  <span>AI Threat Detection</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  <span>24/7 Automated Protection</span>
-                </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">3</span>
+                <span className="text-center">Enter code here</span>
               </div>
             </div>
+            
+            <Link 
+              to="/devices" 
+              className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2.5 rounded-lg font-semibold transition-all shadow-lg shadow-cyan-900/20"
+            >
+              <Plus className="w-4 h-4" />
+              Connect Device
+            </Link>
           </div>
         ) : (
           /* === DASHBOARD CONTENT === */

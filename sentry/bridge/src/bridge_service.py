@@ -812,28 +812,33 @@ async def simulate_claim(request: PairingClaimRequest):
 @app.post("/api/setup/reset")
 async def reset_setup():
     """
-    DEV ONLY: Resets the sentry to setup mode.
-    Deletes the config file and regenerates a pairing code.
+    Resets the sentry to setup mode for demo purposes.
+    Deletes the config file and clears API key, allowing re-pairing.
     """
-    if os.getenv("DEV_MODE", "false").lower() != "true":
-        raise HTTPException(
-            status_code=403,
-            detail="Reset only available in dev mode"
-        )
-    
     try:
+        # Delete config file if exists
         if bridge_service.config_path.exists():
             bridge_service.config_path.unlink()
+            logger.info("🗑️ Deleted config file")
         
-        bridge_service.sentry_id = None
+        # Reset service state
+        bridge_service.sentry_id = bridge_service.hardware_id
         bridge_service.api_key = None
         bridge_service.is_setup_mode = True
-        bridge_service._generate_pairing_code()
+        bridge_service.connected_devices_count = 0
         
-        logger.info("🔄 Sentry reset to setup mode")
-        return {"status": "reset", "code": bridge_service.pairing_code}
+        # Clear Oracle client API key
+        bridge_service.oracle_client.update_api_key(None)
+        
+        logger.info("🔄 Sentry reset to setup mode - ready for re-pairing")
+        return {
+            "status": "reset", 
+            "message": "Device unregistered successfully. Ready for new pairing.",
+            "claim_token": DEMO_CLAIM_CODE if DEMO_MODE else "Connecting..."
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Reset failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
 # --- END SETUP MODE ENDPOINTS ---
 
