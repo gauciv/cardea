@@ -12,7 +12,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 
-# Add src to Python path
+# Add src to Python path to ensure imports work correctly
 sys.path.insert(0, str(Path(__file__).parent))
 
 from oracle_service import create_app
@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Handle startup and shutdown tasks.
-    This replaces the old @app.on_event('startup') logic.
     """
     logger.info("🔮 Initializing Oracle Cloud Brain...")
     
@@ -40,8 +39,7 @@ async def lifespan(app: FastAPI):
         logger.info("✅ PostgreSQL Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
-        # In production, you might not want to exit, 
-        # but for an MVP, a dead DB means a dead service.
+        # In production, for an MVP, a dead DB means a dead service.
         sys.exit(1)
         
     yield  # The application runs while this is paused
@@ -51,9 +49,8 @@ async def lifespan(app: FastAPI):
 def main():
     """Main entry point"""
     try:
-        # Pass the lifespan to the app factory if your create_app allows it,
-        # otherwise, you can set it here:
         app = create_app()
+        # Attach the lifespan context manager to the app
         app.router.lifespan_context = lifespan
         
         logger.info(f"🌍 Starting Oracle server on port {settings.PORT}")

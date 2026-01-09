@@ -2,12 +2,15 @@
 Oracle Backend FastAPI Service - Optimized for Azure AI & Credit Protection
 Includes Redis-based De-duplication and Rate Limiting
 """
-
+import secrets
 import hashlib
 import json
 import logging
 import os
 import re
+from fastapi import APIRouter, Depends, HTTPException, status, Header # Ensure Header/APIRouter are imported
+from sqlalchemy import select, update # Ensure these are imported
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
@@ -15,6 +18,7 @@ import redis.asyncio as redis
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
+from database import get_db, Device, User
 
 from analytics import AlertCorrelator, ThreatAnalyzer
 from config import settings
@@ -25,7 +29,13 @@ from models import (
     AnalyticsResponse,
     HealthResponse,
     SystemStatus,
+    DeviceRegisterRequest, 
+    DeviceClaimRequest, 
+    DeviceResponse, 
+    DeviceStatus, 
+    DeviceType
 )
+from auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +213,156 @@ async def get_current_system_state() -> dict[str, Any]:
             "dismissed_recently": False,
         }
 
+# ============================================================================
+# IOT DEVICE MANAGEMENT
+# ============================================================================
+
+device_router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+def generate_api_key() -> str:
+    """Generate a secure random API key for devices"""
+    return secrets.token_urlsafe(32)
+
+def generate_claim_token() -> str:
+    """Generate a 6-digit numeric code for easy user claiming"""
+    return str(secrets.randbelow(900000) + 100000)
+
+@device_router.post("/register", response_model=dict)
+async def register_device(
+    request: DeviceRegisterRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Sentry calls this on startup to announce itself."""
+    try:
+        # Check if device exists
+        result = await db.execute(select(Device).where(Device.hardware_id == request.hardware_id))
+        device = result.scalar_one_or_none()
+
+        if device:
+            device.last_seen = datetime.now(timezone.utc)
+            device.version = request.version
+            device.public_key = request.public_key or device.public_key
+            
+            if device.user_id:
+                device.status = DeviceStatus.ONLINE
+                await db.commit()
+                return {"status": "registered", "device_status": DeviceStatus.ONLINE, "message": "Active"}
+            
+            # Ensure unclaimed devices have a token
+            if not device.claim_token:
+                device.claim_token = generate_claim_token()
+            
+            device.status = DeviceStatus.UNCLAIMED
+            await db.commit()
+            return {
+                "status": "registered", 
+                "device_status": DeviceStatus.UNCLAIMED, 
+                "claim_token": device.claim_token
+            }
+
+        # Create new device
+        new_token = generate_claim_token()
+        new_device = Device(
+            hardware_id=request.hardware_id,
+            device_type=request.device_type,
+            version=request.version,
+            public_key=request.public_key,
+            status=DeviceStatus.UNCLAIMED,
+            claim_token=new_token,
+            friendly_name=f"Sentry-{request.hardware_id[:6]}"
+        )
+        db.add(new_device)
+        await db.commit()
+        
+        logger.info(f"🆕 New Sentry Registered: {request.hardware_id}")
+        return {"status": "created", "device_status": DeviceStatus.UNCLAIMED, "claim_token": new_token}
+
+    except Exception as e:
+        logger.error(f"Device registration failed: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed")
+
+@device_router.post("/heartbeat")
+async def device_heartbeat(
+    x_sentry_id: str = Header(..., alias="X-Sentry-ID"),
+    x_sentry_key: str = Header(..., alias="X-Sentry-Key"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Periodic heartbeat from authenticated Sentry devices."""
+    result = await db.execute(select(Device).where(Device.hardware_id == x_sentry_id))
+    device = result.scalar_one_or_none()
+    
+    if not device or device.api_key != x_sentry_key:
+        raise HTTPException(status_code=403, detail="Invalid credentials")
+    
+    device.last_seen = datetime.now(timezone.utc)
+    device.status = DeviceStatus.ONLINE
+    await db.commit()
+    return {"status": "ok"}
+
+@device_router.post("/claim", response_model=DeviceResponse)
+async def claim_device(
+    request: DeviceClaimRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """User claims a device using the 6-digit token."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    result = await db.execute(select(Device).where(Device.claim_token == request.claim_token, Device.user_id == None))
+    device = result.scalar_one_or_none()
+    
+    if not device:
+        raise HTTPException(status_code=404, detail="Invalid token or device already claimed")
+    
+    # Assign to user
+    device.user_id = user_id
+    device.friendly_name = request.friendly_name
+    device.status = DeviceStatus.ONLINE
+    device.api_key = generate_api_key() # Generate the key the device will use
+    device.claim_token = None # Clear token so it can't be reused
+    device.updated_at = datetime.now(timezone.utc)
+    
+    await db.commit()
+    logger.info(f"✅ Device {device.hardware_id} claimed by User {user_id}")
+    
+    return DeviceResponse(
+        id=str(device.id),
+        hardware_id=device.hardware_id,
+        name=device.friendly_name,
+        status=device.status,
+        device_type=device.device_type,
+        last_seen=device.last_seen,
+        version=device.version or "1.0.0",
+        registered_at=device.created_at
+    )
+
+@device_router.get("/list", response_model=list[DeviceResponse])
+async def list_user_devices(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """List all devices belonging to the user."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    result = await db.execute(select(Device).where(Device.user_id == user_id))
+    devices = result.scalars().all()
+    
+    return [
+        DeviceResponse(
+            id=str(d.id),
+            hardware_id=d.hardware_id,
+            name=d.friendly_name or "Unknown",
+            status=d.status,
+            device_type=d.device_type,
+            last_seen=d.last_seen,
+            ip_address=d.ip_address,
+            version=d.version or "1.0.0",
+            registered_at=d.created_at
+        ) for d in devices
+    ]
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -221,6 +381,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
+    app.include_router(device_router)
     threat_analyzer = ThreatAnalyzer()
     alert_correlator = AlertCorrelator()
     
