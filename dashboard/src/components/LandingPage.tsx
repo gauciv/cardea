@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Search, Shield, BarChart3, Zap, Bell, Brain, Monitor, Network, Eye, Activity, AlertTriangle, Lock, Menu, X, Twitter, Linkedin, Github } from "lucide-react";
+import { Search, Shield, BarChart3, Zap, Bell, Brain, Monitor, Network, Eye, Activity, AlertTriangle, Lock, Twitter, Linkedin, Github } from "lucide-react";
 import cardeaLogo from "../assets/Cardea.png";
 
 // Animated Stars Component
@@ -52,7 +52,7 @@ const AnimatedStars = ({ opacity }: { opacity: number }) => {
         }
       `}</style>
       <div 
-        className="fixed inset-0 pointer-events-none z-20 overflow-hidden transition-opacity duration-700 ease-out"
+        className="fixed inset-0 pointer-events-none z-30 overflow-hidden transition-opacity duration-700 ease-out"
         style={{ opacity }}
       >
         {stars.map((star) => (
@@ -78,8 +78,8 @@ const AnimatedStars = ({ opacity }: { opacity: number }) => {
 };
 
 // Easing function for smooth transition
-const easeOutCubic = (t: number): number => {
-  return 1 - Math.pow(1 - t, 3);
+const easeInOutQuart = (t: number): number => {
+  return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 };
 
 type AnimationPhase = 'hero' | 'transitioning' | 'final';
@@ -102,9 +102,12 @@ const LandingPage = () => {
   const scrollAccumulatorRef = useRef(0);
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchAccumulatorRef = useRef(0);
   
   const SCROLL_THRESHOLD = 50;
-  const ANIMATION_DURATION = 800;
+  const TOUCH_THRESHOLD = 50;
+  const ANIMATION_DURATION = 1000;
 
   // Lock body scroll during hero phase
   useEffect(() => {
@@ -118,7 +121,7 @@ const LandingPage = () => {
     };
   }, [phase]);
 
-  // Animation loop for transition
+  // Animation loop for smooth transition
   const runTransition = useCallback(() => {
     if (startTimeRef.current === null) {
       startTimeRef.current = performance.now();
@@ -126,7 +129,7 @@ const LandingPage = () => {
 
     const elapsed = performance.now() - startTimeRef.current;
     const rawProgress = Math.min(elapsed / ANIMATION_DURATION, 1);
-    const easedProgress = easeOutCubic(rawProgress);
+    const easedProgress = easeInOutQuart(rawProgress);
     
     setAnimationProgress(easedProgress);
 
@@ -139,15 +142,15 @@ const LandingPage = () => {
     }
   }, []);
 
-  // Scroll handler for hero phase
+  // Scroll handler for hero phase (desktop)
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (phase === 'final') return;
       
       e.preventDefault();
       
-      if (phase === 'hero') {
-        scrollAccumulatorRef.current += Math.abs(e.deltaY);
+      if (phase === 'hero' && e.deltaY > 0) {
+        scrollAccumulatorRef.current += e.deltaY;
         if (scrollAccumulatorRef.current >= SCROLL_THRESHOLD) {
           setPhase('transitioning');
           scrollAccumulatorRef.current = 0;
@@ -160,11 +163,59 @@ const LandingPage = () => {
     return () => window.removeEventListener('wheel', handleWheel);
   }, [phase, runTransition]);
 
-  // Progress calculations
-  const heroOpacity = phase === 'transitioning' ? 1 - animationProgress : (phase === 'hero' ? 1 : 0);
-  const heroTranslateY = phase === 'transitioning' ? -animationProgress * 50 : (phase === 'hero' ? 0 : -50);
-  const featuresOpacity = phase === 'transitioning' ? animationProgress : (phase === 'final' ? 1 : 0);
-  const featuresTranslateY = phase === 'transitioning' ? (1 - animationProgress) * 40 : (phase === 'final' ? 0 : 40);
+  // Touch handlers for mobile
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (phase === 'final') return;
+      touchStartYRef.current = e.touches[0].clientY;
+      touchAccumulatorRef.current = 0;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (phase === 'final' || touchStartYRef.current === null) return;
+      
+      // Prevent default scrolling during hero phase
+      if (phase === 'hero' || phase === 'transitioning') {
+        e.preventDefault();
+      }
+      
+      const touchY = e.touches[0].clientY;
+      const deltaY = touchStartYRef.current - touchY; // Positive when swiping up
+      
+      if (phase === 'hero' && deltaY > 0) {
+        touchAccumulatorRef.current = deltaY;
+        if (touchAccumulatorRef.current >= TOUCH_THRESHOLD) {
+          setPhase('transitioning');
+          touchAccumulatorRef.current = 0;
+          touchStartYRef.current = null;
+          runTransition();
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchStartYRef.current = null;
+      touchAccumulatorRef.current = 0;
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [phase, runTransition]);
+
+  // Progress calculations - hero slides up to reveal features beneath
+  // Features is always visible underneath, hero slides away
+  const heroOpacity = phase === 'transitioning' ? Math.max(0, 1 - animationProgress * 1.5) : (phase === 'hero' ? 1 : 0);
+  const heroTranslateY = phase === 'transitioning' ? -animationProgress * 100 : (phase === 'hero' ? 0 : -100);
+  const heroBlur = phase === 'transitioning' ? animationProgress * 8 : 0;
+  // Features is always fully visible once transition starts
+  const featuresOpacity = phase === 'hero' ? 0 : 1;
 
   // Intersection Observer for scroll-triggered animations
   useEffect(() => {
@@ -342,7 +393,7 @@ const LandingPage = () => {
   }, [features.length]);
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className="min-h-screen" style={{ background: '#030508' }}>
       {/* Animated Stars Background - Smooth opacity transition */}
       <AnimatedStars 
         opacity={
@@ -354,139 +405,49 @@ const LandingPage = () => {
       
       {/* Persistent Navigation - Sleek Modern Design */}
       <nav 
-        className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-5 px-4 transition-all duration-700"
+        className="fixed top-0 left-0 right-0 z-50 transition-all duration-700"
         style={{
           opacity: navVisible ? 1 : 0,
           transform: navVisible ? 'translateY(0)' : 'translateY(-20px)',
         }}
       >
-        <div 
-          className="flex items-center px-3 py-2.5 rounded-2xl transition-all duration-500"
-          style={{
-            background: navCompact 
-              ? 'rgba(10, 15, 30, 0.75)' 
-              : 'rgba(15, 25, 45, 0.5)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
-            transform: navCompact ? 'scale(0.97)' : 'scale(1)',
-          }}
-        >
-          <div className="flex items-center justify-center px-3 mr-3">
-            <img 
-              src={cardeaLogo} 
-              alt="Cardea" 
-              className="h-8 w-auto object-contain transition-all duration-500"
-              style={{ 
-                filter: navCompact ? 'brightness(1.15) drop-shadow(0 0 8px rgba(74, 158, 218, 0.3))' : 'brightness(1)', 
-                userSelect: 'none', 
-                pointerEvents: 'none' 
-              }}
-              draggable={false}
-              onContextMenu={(e) => e.preventDefault()}
-              onDragStart={(e) => e.preventDefault()}
-            />
-          </div>
-          
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-0.5">
-            {navItems.map((item, index) => (
-              <a
-                key={index}
-                href={item.href}
-                onClick={(e) => {
-                  // prevent the hash fragment from appearing in the URL
-                  e.preventDefault();
-                  if (item.name === 'Features') {
-                    if (phase === 'hero') {
-                      setPhase('transitioning');
-                      runTransition();
-                    } else if (phase === 'final') {
-                      document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  } else if (item.name === 'Pricing') {
-                    e.preventDefault();
-                    if (phase === 'hero') {
-                      setPhase('transitioning');
-                      runTransition();
-                    } else if (phase === 'final') {
-                      document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  } else if (item.name === 'Home') {
-                    if (phase !== 'hero') {
-                      setPhase('hero');
-                      setAnimationProgress(0);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }
-                }}
-                className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group"
-                style={{
-                  fontFamily: 'Inter, Nunito, sans-serif',
-                  fontWeight: 500,
-                  letterSpacing: '0.01em',
-                  transitionDelay: `${index * 50}ms`,
-                }}
-              >
-                {item.name}
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
-              </a>
-            ))}
-            <Link 
-              to="/login" 
-              className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group" 
-              style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
-            >
-              Log In
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
-            </Link>
-            <Link 
-              to="/login?mode=register" 
-              className="ml-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" 
-              style={{ 
-                background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
-                color: 'white', 
-                fontFamily: 'Inter, Nunito, sans-serif',
-                letterSpacing: '0.02em',
-                boxShadow: navCompact 
-                  ? '0 0 24px rgba(38, 116, 178, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)' 
-                  : '0 4px 16px rgba(38, 116, 178, 0.25), 0 2px 8px rgba(0, 0, 0, 0.2)',
-              }}
-            >
-              Get Started
-            </Link>
-          </div>
-          
-          {/* Mobile Hamburger Button */}
-          <button
-            className="md:hidden p-2 text-gray-300 hover:text-white transition-colors"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-        
-        {/* Mobile Menu Dropdown */}
-        {mobileMenuOpen && (
+        {/* Desktop Navigation - Centered pill */}
+        <div className="hidden md:flex justify-center pt-5 px-4">
           <div 
-            className="md:hidden absolute top-full left-0 right-0 mt-2 mx-4 rounded-2xl overflow-hidden"
+            className="flex items-center px-3 py-2.5 rounded-2xl transition-all duration-500"
             style={{
-              background: 'rgba(10, 15, 30, 0.95)',
-              backdropFilter: 'blur(20px)',
+              background: navCompact 
+                ? 'rgba(10, 15, 30, 0.75)' 
+                : 'rgba(15, 25, 45, 0.5)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+              transform: navCompact ? 'scale(0.97)' : 'scale(1)',
             }}
           >
-            <div className="flex flex-col p-4 space-y-2">
+            <div className="flex items-center justify-center px-3 mr-3">
+              <img 
+                src={cardeaLogo} 
+                alt="Cardea" 
+                className="h-8 w-auto object-contain transition-all duration-500"
+                style={{ 
+                  filter: navCompact ? 'brightness(1.15) drop-shadow(0 0 8px rgba(74, 158, 218, 0.3))' : 'brightness(1)', 
+                  userSelect: 'none', 
+                  pointerEvents: 'none' 
+                }}
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+              />
+            </div>
+            
+            <div className="flex items-center space-x-0.5">
               {navItems.map((item, index) => (
                 <a
                   key={index}
                   href={item.href}
                   onClick={(e) => {
-                    setMobileMenuOpen(false);
-                    // prevent the hash fragment from appearing in the URL
                     e.preventDefault();
                     if (item.name === 'Features') {
                       if (phase === 'hero') {
@@ -496,7 +457,6 @@ const LandingPage = () => {
                         document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
                       }
                     } else if (item.name === 'Pricing') {
-                      e.preventDefault();
                       if (phase === 'hero') {
                         setPhase('transitioning');
                         runTransition();
@@ -511,35 +471,232 @@ const LandingPage = () => {
                       }
                     }
                   }}
-                  className="px-4 py-3 text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all"
-                  style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
+                  className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group"
+                  style={{
+                    fontFamily: 'Inter, Nunito, sans-serif',
+                    fontWeight: 500,
+                    letterSpacing: '0.01em',
+                    transitionDelay: `${index * 50}ms`,
+                  }}
                 >
                   {item.name}
+                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
                 </a>
               ))}
-              <Link
-                to="/login"
-                onClick={() => setMobileMenuOpen(false)}
-                className="px-4 py-3 text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+              <Link 
+                to="/login" 
+                className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-all duration-300 rounded-xl hover:bg-white/[0.06] relative group" 
                 style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
               >
                 Log In
+                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#2674b2] to-[#4a9eda] rounded-full transition-all duration-300 group-hover:w-4" />
               </Link>
-              <Link
-                to="/login?mode=register"
-                onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 px-4 py-3 rounded-xl text-center font-semibold text-white transition-all"
-                style={{
+              <Link 
+                to="/login?mode=register" 
+                className="ml-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" 
+                style={{ 
                   background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
+                  color: 'white', 
                   fontFamily: 'Inter, Nunito, sans-serif',
+                  letterSpacing: '0.02em',
+                  boxShadow: navCompact 
+                    ? '0 0 24px rgba(38, 116, 178, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)' 
+                    : '0 4px 16px rgba(38, 116, 178, 0.25), 0 2px 8px rgba(0, 0, 0, 0.2)',
                 }}
               >
                 Get Started
               </Link>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* Mobile Navigation - Full width bar */}
+        <div 
+          className="md:hidden flex items-center justify-between px-4 py-3"
+          style={{
+            background: navCompact 
+              ? 'rgba(5, 10, 20, 0.9)' 
+              : 'rgba(5, 10, 20, 0.7)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+          }}
+        >
+          {/* Logo */}
+          <div className="flex items-center">
+            <img 
+              src={cardeaLogo} 
+              alt="Cardea" 
+              className="h-7 w-auto object-contain"
+              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              draggable={false}
+            />
+          </div>
+          
+          {/* Right side - CTA + Menu */}
+          <div className="flex items-center gap-3">
+            <Link 
+              to="/login?mode=register" 
+              className="px-4 py-2 rounded-lg text-xs font-semibold transition-all active:scale-95" 
+              style={{ 
+                background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
+                color: 'white', 
+                fontFamily: 'Inter, Nunito, sans-serif',
+              }}
+            >
+              Get Started
+            </Link>
+            
+            {/* Hamburger Button */}
+            <button
+              className="p-2 text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <div className="w-5 h-4 flex flex-col justify-between">
+                <span 
+                  className={`block h-0.5 bg-current transition-all duration-300 origin-center ${mobileMenuOpen ? 'rotate-45 translate-y-[7px]' : ''}`} 
+                />
+                <span 
+                  className={`block h-0.5 bg-current transition-all duration-300 ${mobileMenuOpen ? 'opacity-0 scale-0' : ''}`} 
+                />
+                <span 
+                  className={`block h-0.5 bg-current transition-all duration-300 origin-center ${mobileMenuOpen ? '-rotate-45 -translate-y-[7px]' : ''}`} 
+                />
+              </div>
+            </button>
+          </div>
+        </div>
       </nav>
+
+      {/* Mobile Menu - Full Screen Overlay */}
+      <div 
+        className={`md:hidden fixed inset-0 z-[60] transition-all duration-500 ${mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+      >
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        
+        {/* Slide-in Panel */}
+        <div 
+          className={`absolute top-0 right-0 h-full w-[280px] transition-transform duration-500 ease-out ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          style={{
+            background: 'linear-gradient(180deg, rgba(10, 18, 35, 0.98) 0%, rgba(5, 10, 20, 0.98) 100%)',
+            backdropFilter: 'blur(20px)',
+            borderLeft: '1px solid rgba(255, 255, 255, 0.1)',
+            boxShadow: '-10px 0 40px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          {/* Close Button */}
+          <div className="flex justify-end p-5">
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-2 text-gray-400 hover:text-white transition-colors rounded-xl hover:bg-white/10"
+              aria-label="Close menu"
+            >
+              <div className="w-5 h-5 relative">
+                <span className="absolute top-1/2 left-0 w-full h-0.5 bg-current rotate-45 -translate-y-1/2" />
+                <span className="absolute top-1/2 left-0 w-full h-0.5 bg-current -rotate-45 -translate-y-1/2" />
+              </div>
+            </button>
+          </div>
+          
+          {/* Menu Items */}
+          <div className="flex flex-col px-6 pt-4">
+            {navItems.map((item, index) => (
+              <a
+                key={index}
+                href={item.href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMobileMenuOpen(false);
+                  // Small delay to let animation complete
+                  setTimeout(() => {
+                    if (item.name === 'Features') {
+                      if (phase === 'hero') {
+                        setPhase('transitioning');
+                        runTransition();
+                      } else if (phase === 'final') {
+                        document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    } else if (item.name === 'Pricing') {
+                      if (phase === 'hero') {
+                        setPhase('transitioning');
+                        runTransition();
+                      } else if (phase === 'final') {
+                        document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    } else if (item.name === 'Home') {
+                      if (phase !== 'hero') {
+                        setPhase('hero');
+                        setAnimationProgress(0);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }
+                  }, 300);
+                }}
+                className={`py-4 text-lg transition-all duration-300 border-b border-white/5 ${mobileMenuOpen ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}`}
+                style={{ 
+                  fontFamily: 'Inter, Nunito, sans-serif', 
+                  fontWeight: 500,
+                  color: 'rgba(255, 255, 255, 0.85)',
+                  transitionDelay: mobileMenuOpen ? `${index * 75 + 100}ms` : '0ms',
+                }}
+              >
+                {item.name}
+              </a>
+            ))}
+            
+            <Link
+              to="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`py-4 text-lg transition-all duration-300 border-b border-white/5 ${mobileMenuOpen ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}`}
+              style={{ 
+                fontFamily: 'Inter, Nunito, sans-serif', 
+                fontWeight: 500,
+                color: 'rgba(255, 255, 255, 0.85)',
+                transitionDelay: mobileMenuOpen ? `${navItems.length * 75 + 100}ms` : '0ms',
+              }}
+            >
+              Log In
+            </Link>
+          </div>
+          
+          {/* CTA Button */}
+          <div 
+            className={`px-6 pt-8 transition-all duration-500 ${mobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
+            style={{ transitionDelay: mobileMenuOpen ? `${(navItems.length + 1) * 75 + 150}ms` : '0ms' }}
+          >
+            <Link
+              to="/login?mode=register"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block w-full py-4 rounded-xl text-center font-semibold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
+                fontFamily: 'Inter, Nunito, sans-serif',
+                boxShadow: '0 4px 20px rgba(38, 116, 178, 0.4)',
+              }}
+            >
+              Get Started
+            </Link>
+          </div>
+          
+          {/* Brand footer */}
+          <div 
+            className={`absolute bottom-8 left-6 right-6 transition-all duration-500 ${mobileMenuOpen ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
+            style={{ transitionDelay: mobileMenuOpen ? '500ms' : '0ms' }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <img src={cardeaLogo} alt="Cardea" className="h-8 w-auto" />
+            </div>
+            <p className="text-gray-500 text-xs" style={{ fontFamily: 'Nunito, sans-serif' }}>
+              AI-powered network security
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Hero Section - Fixed First Page */}
       {phase !== 'final' && (
@@ -548,8 +705,9 @@ const LandingPage = () => {
         style={{
           opacity: heroOpacity,
           transform: `translateY(${heroTranslateY}vh)`,
-          transition: phase === 'transitioning' ? 'none' : 'all 0.3s ease-out',
-          zIndex: 10,
+          filter: `blur(${heroBlur}px)`,
+          transition: 'none',
+          zIndex: 20,
           background: `linear-gradient(180deg,
             #000000 0%,
             #000000 15%,
@@ -628,9 +786,9 @@ const LandingPage = () => {
         <div className="h-24" />
 
         {/* Hero Content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-4 text-center relative z-10" style={{ marginBottom: '120px' }}>
+        <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 text-center relative z-10" style={{ marginBottom: '80px' }}>
           <h1 
-            className="text-4xl md:text-5xl lg:text-6xl text-white mb-6 animate-fade-in leading-tight"
+            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white mb-4 sm:mb-6 animate-fade-in leading-tight"
             style={{ 
               fontFamily: 'Geo, sans-serif', 
               fontWeight: 400, 
@@ -655,8 +813,8 @@ const LandingPage = () => {
           </p>
 
           {/* Feature Cards Carousel */}
-          <div className="animate-fade-in" style={{ animationDelay: '0.6s' }}>
-            <div className="relative h-16 w-[420px] md:w-[480px] mx-auto" style={{ perspective: '1000px' }}>
+          <div className="animate-fade-in w-full px-4" style={{ animationDelay: '0.6s' }}>
+            <div className="relative h-16 w-full max-w-[320px] sm:max-w-[420px] md:max-w-[480px] mx-auto" style={{ perspective: '1000px' }}>
               {features.map((feature, index) => {
                 const isCurrent = index === currentFeatureIndex;
                 const isNext = index === (currentFeatureIndex + 1) % features.length;
@@ -695,10 +853,10 @@ const LandingPage = () => {
 
         {/* Technologies Carousel */}
         <div 
-          className="absolute bottom-24 left-0 right-0 text-center animate-fade-in select-none z-10" 
+          className="absolute bottom-16 sm:bottom-24 left-0 right-0 text-center animate-fade-in select-none z-10" 
           style={{ animationDelay: '0.8s', userSelect: 'none' }}
         >
-          <div className="relative w-full overflow-hidden py-4">
+          <div className="relative w-full overflow-hidden py-2 sm:py-4">
             <div 
               className="flex gap-16 items-center carousel-track"
               style={{
@@ -729,15 +887,15 @@ const LandingPage = () => {
         </div>
 
         {/* Scroll Indicator */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
-          <div className="flex flex-col items-center gap-2 animate-bounce">
+        <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-10">
+          <div className="flex flex-col items-center gap-1 sm:gap-2 animate-bounce">
             <span 
-              className="text-xs text-slate-600 tracking-wider"
+              className="text-[10px] sm:text-xs text-slate-600 tracking-wider"
               style={{ fontFamily: 'Nunito, sans-serif' }}
             >
-              Scroll to explore
+              Swipe to explore
             </span>
-            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
@@ -749,11 +907,11 @@ const LandingPage = () => {
       <div 
         id="features"
         ref={featuresRef}
-        className="relative min-h-screen flex items-center"
+        className="relative min-h-screen flex items-center pt-20 md:pt-0"
         style={{
           opacity: featuresOpacity,
-          transform: `translateY(${featuresTranslateY}px)`,
-          transition: phase === 'transitioning' ? 'none' : 'all 0.3s ease-out',
+          transition: 'opacity 0.3s ease-out',
+          zIndex: 10,
           background: 'linear-gradient(180deg, #030508 0%, #050810 30%, #0a1220 100%)'
         }}
       >
