@@ -522,6 +522,7 @@ const App: React.FC = () => {
                         <div className="flex gap-3 mt-4">
                           {/* FIX: Use safeEntries helper */}
                           {safeEntries(severityStats).map(([severity, count]) => {
+                            // FIX: Cast string key to valid config key
                             const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
                             return (
                               <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
@@ -571,6 +572,7 @@ const App: React.FC = () => {
                       </tr>
                     ) : data?.alerts && data.alerts.length > 0 ? (
                       data.alerts.map((alert: Alert) => {
+                        // FIX: Cast string key to valid config key
                         const config = severityConfig[alert.severity as keyof typeof severityConfig] || severityConfig.low;
                         const SeverityIcon = config.icon;
                         return (
