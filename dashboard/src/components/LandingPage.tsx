@@ -8,9 +8,14 @@ const easeOutCubic = (t: number): number => {
   return 1 - Math.pow(1 - t, 3);
 };
 
-type AnimationPhase = 'hero' | 'transitioning' | 'final';
+type AnimationPhase = "hero" | "transitioning" | "final";
 
 const LandingPage = () => {
+  // Set tab title for landing page
+  useEffect(() => {
+    document.title = "Cardea";
+  }, []);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const useCasesRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
@@ -22,7 +27,7 @@ const LandingPage = () => {
   const [isAnnual, setIsAnnual] = useState(true);
 
   // Transition state
-  const [phase, setPhase] = useState<AnimationPhase>('hero');
+  const [phase, setPhase] = useState<AnimationPhase>("hero");
   const [animationProgress, setAnimationProgress] = useState(0);
   const scrollAccumulatorRef = useRef(0);
   const animationRef = useRef<number | null>(null);
@@ -33,13 +38,13 @@ const LandingPage = () => {
 
   // Lock body scroll during hero phase
   useEffect(() => {
-    if (phase === 'hero' || phase === 'transitioning') {
-      document.body.style.overflow = 'hidden';
+    if (phase === "hero" || phase === "transitioning") {
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'auto';
+      document.body.style.overflow = "auto";
     }
     return () => {
-      document.body.style.overflow = 'auto';
+      document.body.style.overflow = "auto";
     };
   }, [phase]);
 
@@ -58,7 +63,7 @@ const LandingPage = () => {
     if (rawProgress < 1) {
       animationRef.current = requestAnimationFrame(runTransition);
     } else {
-      setPhase('final');
+      setPhase("final");
       setFeaturesVisible(true);
       startTimeRef.current = null;
     }
@@ -74,22 +79,38 @@ const LandingPage = () => {
       if (phase === 'hero') {
         scrollAccumulatorRef.current += Math.abs(e.deltaY);
         if (scrollAccumulatorRef.current >= SCROLL_THRESHOLD) {
-          setPhase('transitioning');
+          setPhase("transitioning");
           scrollAccumulatorRef.current = 0;
           runTransition();
         }
       }
     };
 
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    return () => window.removeEventListener('wheel', handleWheel);
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => window.removeEventListener("wheel", handleWheel);
   }, [phase, runTransition]);
 
   // Progress calculations
-  const heroOpacity = phase === 'transitioning' ? 1 - animationProgress : (phase === 'hero' ? 1 : 0);
-  const heroTranslateY = phase === 'transitioning' ? -animationProgress * 50 : (phase === 'hero' ? 0 : -50);
-  const featuresOpacity = phase === 'transitioning' ? animationProgress : (phase === 'final' ? 1 : 0);
-  const featuresTranslateY = phase === 'transitioning' ? (1 - animationProgress) * 40 : (phase === 'final' ? 0 : 40);
+  const heroOpacity =
+    phase === "transitioning"
+      ? 1 - animationProgress
+      : phase === "hero"
+      ? 1
+      : 0;
+  const heroTranslateY =
+    phase === "transitioning"
+      ? -animationProgress * 50
+      : phase === "hero"
+      ? 0
+      : -50;
+  const featuresOpacity =
+    phase === "transitioning" ? animationProgress : phase === "final" ? 1 : 0;
+  const featuresTranslateY =
+    phase === "transitioning"
+      ? (1 - animationProgress) * 40
+      : phase === "final"
+      ? 0
+      : 40;
 
   // Intersection Observer for scroll-triggered animations
   useEffect(() => {
@@ -134,22 +155,36 @@ const LandingPage = () => {
       subtitle: "Real-time detection, not post-mortem analysis",
       features: [
         {
-          title: "\"See It, Stop It, Done\"",
-          description: "AI-powered anomaly detection catches threats in milliseconds. No more sifting through thousands of alerts—Cardea surfaces what matters and takes action automatically."
+          title: '"See It, Stop It, Done"',
+          description:
+            "AI-powered anomaly detection catches threats in milliseconds. No more sifting through thousands of alerts—Cardea surfaces what matters and takes action automatically.",
         },
         {
           title: "Your Playbook, Automated",
-          description: "Define response workflows once. Watch Cardea execute them flawlessly every time. Isolate compromised hosts, block malicious IPs, and notify your team—hands-free."
-        }
+          description:
+            "Define response workflows once. Watch Cardea execute them flawlessly every time. Isolate compromised hosts, block malicious IPs, and notify your team—hands-free.",
+        },
       ],
       visual: {
-        type: 'alert',
+        type: "alert",
         data: [
-          { severity: 'critical', message: 'Lateral movement detected - Host isolated', time: '2ms response' },
-          { severity: 'warning', message: 'Anomalous DNS queries from 10.0.1.45', time: 'Investigating' },
-          { severity: 'info', message: 'New device fingerprinted on VLAN 12', time: 'Baselined' },
-        ]
-      }
+          {
+            severity: "critical",
+            message: "Lateral movement detected - Host isolated",
+            time: "2ms response",
+          },
+          {
+            severity: "warning",
+            message: "Anomalous DNS queries from 10.0.1.45",
+            time: "Investigating",
+          },
+          {
+            severity: "info",
+            message: "New device fingerprinted on VLAN 12",
+            time: "Baselined",
+          },
+        ],
+      },
     },
     {
       label: "NETWORK ADMINS",
@@ -158,17 +193,24 @@ const LandingPage = () => {
       features: [
         {
           title: "Complete Asset Discovery",
-          description: "Know every device on your network—managed or not. Cardea continuously maps your infrastructure, tracks changes, and alerts on unauthorized additions."
+          description:
+            "Know every device on your network—managed or not. Cardea continuously maps your infrastructure, tracks changes, and alerts on unauthorized additions.",
         },
         {
           title: "Traffic Intelligence",
-          description: "Understand your bandwidth. See which applications dominate, spot bottlenecks before users complain, and catch policy violations in real-time."
-        }
+          description:
+            "Understand your bandwidth. See which applications dominate, spot bottlenecks before users complain, and catch policy violations in real-time.",
+        },
       ],
       visual: {
-        type: 'network',
-        data: { devices: 847, activeFlows: '12.4K', bandwidth: '2.4 Gbps', anomalies: 3 }
-      }
+        type: "network",
+        data: {
+          devices: 847,
+          activeFlows: "12.4K",
+          bandwidth: "2.4 Gbps",
+          anomalies: 3,
+        },
+      },
     },
     {
       label: "SOC ANALYSTS",
@@ -177,22 +219,40 @@ const LandingPage = () => {
       features: [
         {
           title: "One Dashboard, Full Context",
-          description: "Every alert comes with host history, user context, threat intelligence, and recommended actions. Stop pivoting between 12 tools for basic investigations."
+          description:
+            "Every alert comes with host history, user context, threat intelligence, and recommended actions. Stop pivoting between 12 tools for basic investigations.",
         },
         {
           title: "AI-Assisted Hunting",
-          description: "Ask questions in plain English. Cardea searches your network data, correlates events, and surfaces patterns that would take hours to find manually."
-        }
+          description:
+            "Ask questions in plain English. Cardea searches your network data, correlates events, and surfaces patterns that would take hours to find manually.",
+        },
       ],
       visual: {
-        type: 'timeline',
+        type: "timeline",
         data: [
-          { time: '14:32:01', event: 'Suspicious PowerShell execution', status: 'detected' },
-          { time: '14:32:02', event: 'Process tree analyzed', status: 'enriched' },
-          { time: '14:32:03', event: 'Matched MITRE ATT&CK: T1059.001', status: 'classified' },
-          { time: '14:32:04', event: 'Host quarantined, ticket created', status: 'resolved' },
-        ]
-      }
+          {
+            time: "14:32:01",
+            event: "Suspicious PowerShell execution",
+            status: "detected",
+          },
+          {
+            time: "14:32:02",
+            event: "Process tree analyzed",
+            status: "enriched",
+          },
+          {
+            time: "14:32:03",
+            event: "Matched MITRE ATT&CK: T1059.001",
+            status: "classified",
+          },
+          {
+            time: "14:32:04",
+            event: "Host quarantined, ticket created",
+            status: "resolved",
+          },
+        ],
+      },
     },
     {
       label: "COMPLIANCE",
@@ -201,18 +261,25 @@ const LandingPage = () => {
       features: [
         {
           title: "Automated Evidence Collection",
-          description: "Generate compliance reports on demand. Cardea maintains audit trails, logs access patterns, and documents security controls—no manual data gathering."
+          description:
+            "Generate compliance reports on demand. Cardea maintains audit trails, logs access patterns, and documents security controls—no manual data gathering.",
         },
         {
           title: "Policy Enforcement",
-          description: "Define security policies once, enforce them everywhere. Get instant alerts when systems drift from compliance baselines."
-        }
+          description:
+            "Define security policies once, enforce them everywhere. Get instant alerts when systems drift from compliance baselines.",
+        },
       ],
       visual: {
-        type: 'compliance',
-        data: { frameworks: ['SOC 2', 'ISO 27001', 'NIST'], score: 94, lastAudit: '2 days ago', findings: 0 }
-      }
-    }
+        type: "compliance",
+        data: {
+          frameworks: ["SOC 2", "ISO 27001", "NIST"],
+          score: 94,
+          lastAudit: "2 days ago",
+          findings: 0,
+        },
+      },
+    },
   ];
 
   const features = [
@@ -298,7 +365,7 @@ const LandingPage = () => {
 
   // Make nav compact after transition
   useEffect(() => {
-    setNavCompact(phase === 'final');
+    setNavCompact(phase === "final");
   }, [phase]);
 
   // Feature card rotation
@@ -316,11 +383,11 @@ const LandingPage = () => {
       <nav
 
       {/* Persistent Navigation */}
-      <nav 
+      <nav
         className="fixed top-0 left-0 right-0 z-50 flex justify-center pt-5 px-4 transition-all duration-700"
         style={{
           opacity: navVisible ? 1 : 0,
-          transform: navVisible ? 'translateY(0)' : 'translateY(-20px)',
+          transform: navVisible ? "translateY(0)" : "translateY(-20px)",
         }}
       >
         <div
@@ -368,8 +435,10 @@ const LandingPage = () => {
                     if (phase === 'hero') {
                       setPhase('transitioning');
                       runTransition();
-                    } else if (phase === 'final') {
-                      document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
+                    } else if (phase === "final") {
+                      document
+                        .getElementById("use-cases")
+                        ?.scrollIntoView({ behavior: "smooth" });
                     }
                   } else if (item.name === 'Pricing') {
                     // Update URL to include #pricing
@@ -391,7 +460,7 @@ const LandingPage = () => {
                     if (phase !== 'hero') {
                       setPhase('hero');
                       setAnimationProgress(0);
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      window.scrollTo({ top: 0, behavior: "smooth" });
                     }
                   }
                 }}
@@ -399,7 +468,7 @@ const LandingPage = () => {
                 style={{
                   fontFamily: 'Inter, Nunito, sans-serif',
                   fontWeight: 500,
-                  letterSpacing: '0.01em',
+                  letterSpacing: "0.01em",
                   transitionDelay: `${index * 50}ms`,
                 }}
               >
@@ -438,7 +507,11 @@ const LandingPage = () => {
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
           </button>
         </div>
 
@@ -447,10 +520,10 @@ const LandingPage = () => {
           <div
             className="md:hidden absolute top-full left-0 right-0 mt-2 mx-4 rounded-2xl overflow-hidden"
             style={{
-              background: 'rgba(10, 15, 30, 0.95)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+              background: "rgba(10, 15, 30, 0.95)",
+              backdropFilter: "blur(20px)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
             }}
           >
             <div className="flex flex-col p-4 space-y-2">
@@ -467,8 +540,10 @@ const LandingPage = () => {
                       if (phase === 'hero') {
                         setPhase('transitioning');
                         runTransition();
-                      } else if (phase === 'final') {
-                        document.getElementById('use-cases')?.scrollIntoView({ behavior: 'smooth' });
+                      } else if (phase === "final") {
+                        document
+                          .getElementById("use-cases")
+                          ?.scrollIntoView({ behavior: "smooth" });
                       }
                     } else if (item.name === 'Pricing') {
                       window.history.pushState(null, "", "#pricing");
@@ -486,12 +561,15 @@ const LandingPage = () => {
                       if (phase !== 'hero') {
                         setPhase('hero');
                         setAnimationProgress(0);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        window.scrollTo({ top: 0, behavior: "smooth" });
                       }
                     }
                   }}
                   className="px-4 py-3 text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all"
-                  style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
+                  style={{
+                    fontFamily: "Inter, Nunito, sans-serif",
+                    fontWeight: 500,
+                  }}
                 >
                   {item.name}
                 </a>
@@ -500,7 +578,10 @@ const LandingPage = () => {
                 to="/login"
                 onClick={() => setMobileMenuOpen(false)}
                 className="px-4 py-3 text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all"
-                style={{ fontFamily: 'Inter, Nunito, sans-serif', fontWeight: 500 }}
+                style={{
+                  fontFamily: "Inter, Nunito, sans-serif",
+                  fontWeight: 500,
+                }}
               >
                 Log In
               </Link>
@@ -509,8 +590,9 @@ const LandingPage = () => {
                 onClick={() => setMobileMenuOpen(false)}
                 className="mt-2 px-4 py-3 rounded-xl text-center font-semibold text-white transition-all"
                 style={{
-                  background: 'linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)',
-                  fontFamily: 'Inter, Nunito, sans-serif',
+                  background:
+                    "linear-gradient(135deg, #2674b2 0%, #3d8fd4 100%)",
+                  fontFamily: "Inter, Nunito, sans-serif",
                 }}
               >
                 Get Started
@@ -732,8 +814,9 @@ const LandingPage = () => {
         style={{
           opacity: featuresOpacity,
           transform: `translateY(${featuresTranslateY}px)`,
-          transition: phase === 'transitioning' ? 'none' : 'all 0.3s ease-out',
-          background: 'linear-gradient(180deg, #030508 0%, #050810 30%, #0a1220 100%)'
+          transition: phase === "transitioning" ? "none" : "all 0.3s ease-out",
+          background:
+            "linear-gradient(180deg, #030508 0%, #050810 30%, #0a1220 100%)",
         }}
       >
         {/* Bottom glow */}
@@ -750,28 +833,65 @@ const LandingPage = () => {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 max-w-7xl mx-auto">
             <div className="flex flex-col justify-center">
-              <h2 className="text-3xl md:text-4xl lg:text-5xl text-white mb-6 leading-tight" style={{ fontFamily: 'Geo, sans-serif', fontWeight: 400 }}>
-                Intelligent<br />
-                <span className="text-gray-400">detection,</span> <span className="text-white">response,</span><br />
-                and <span className="text-blue-400">protection.</span><br />
+              <h2
+                className="text-3xl md:text-4xl lg:text-5xl text-white mb-6 leading-tight"
+                style={{ fontFamily: "Geo, sans-serif", fontWeight: 400 }}
+              >
+                Intelligent
+                <br />
+                <span className="text-gray-400">detection,</span>{" "}
+                <span className="text-white">response,</span>
+                <br />
+                and <span className="text-blue-400">protection.</span>
+                <br />
                 <span className="text-gray-500">Powered by AI.</span>
               </h2>
-              <Link to="/login" className="mt-6 w-fit flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium border border-gray-600 text-white hover:bg-white/10 transition-all duration-300" style={{ fontFamily: 'Nunito, sans-serif' }}>
+              <Link
+                to="/login"
+                className="mt-6 w-fit flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium border border-gray-600 text-white hover:bg-white/10 transition-all duration-300"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+              >
                 Get Started
                 <span className="w-8 h-8 rounded-full bg-[#2674b2] flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <svg
+                    className="w-4 h-4 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
                   </svg>
                 </span>
               </Link>
             </div>
             <div className="flex flex-col justify-center">
-              <div className="text-xs tracking-widest text-[#4a9eda] mb-4" style={{ fontFamily: 'Nunito, sans-serif' }}>[ CARDEA SECURITY ]</div>
-              <p className="text-gray-400 text-base leading-relaxed mb-4" style={{ fontFamily: 'Nunito, sans-serif' }}>
-                Cardea leverages agentic AI to transform network security—automatically detecting anomalies with KitNET, monitoring traffic with Zeek, and blocking threats with Suricata.
+              <div
+                className="text-xs tracking-widest text-[#4a9eda] mb-4"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+              >
+                [ CARDEA SECURITY ]
+              </div>
+              <p
+                className="text-gray-400 text-base leading-relaxed mb-4"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+              >
+                Cardea leverages agentic AI to transform network
+                security—automatically detecting anomalies with KitNET,
+                monitoring traffic with Zeek, and blocking threats with
+                Suricata.
               </p>
-              <p className="text-gray-500 text-sm leading-relaxed" style={{ fontFamily: 'Nunito, sans-serif' }}>
-                Integrated with Microsoft Sentinel for enterprise-grade SIEM capabilities, Cardea provides real-time threat intelligence and automated incident response across your entire infrastructure.
+              <p
+                className="text-gray-500 text-sm leading-relaxed"
+                style={{ fontFamily: "Nunito, sans-serif" }}
+              >
+                Integrated with Microsoft Sentinel for enterprise-grade SIEM
+                capabilities, Cardea provides real-time threat intelligence and
+                automated incident response across your entire infrastructure.
               </p>
             </div>
           </div>
