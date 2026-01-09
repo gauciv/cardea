@@ -13,6 +13,12 @@ import { useAuth } from './lib/useAuth';
 // Use environment variable or default to localhost for development
 const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
 
+// FIX: Use 'unknown' instead of 'any' to satisfy ESLint rules
+const safeEntries = (obj: unknown): [string, number][] => {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.entries(obj as Record<string, number>);
+};
+
 // Severity color/icon mapping
 const severityConfig = {
   critical: { color: 'text-red-500', bg: 'bg-red-950/20 border-red-900/50', icon: XCircle },
@@ -20,9 +26,6 @@ const severityConfig = {
   medium: { color: 'text-yellow-500', bg: 'bg-yellow-950/20 border-yellow-900/50', icon: AlertCircle },
   low: { color: 'text-cyan-500', bg: 'bg-cyan-950/20 border-cyan-900/50', icon: Info },
 };
-
-// FIX: Define this OUTSIDE the component to ensure strict typing
-const EMPTY_STATS: Record<string, number> = {};
 
 // Toast notification component
 const Toast: React.FC<{ message: string; type: 'error' | 'warning' | 'info' | 'success'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
@@ -373,8 +376,9 @@ const App: React.FC = () => {
     }
   }, [fetchData]);
 
-  // FIX: Use the strictly typed constant here
-  const severityStats = data?.alerts_by_severity || EMPTY_STATS;
+  // FIX: Explicitly type this as Record<string, number> so we don't need 'as any' later
+  const severityStats: Record<string, number> = data?.alerts_by_severity || {};
+  // FIX: Access properties using bracket notation or strict typing to avoid 'any'
   const criticalCount = severityStats['critical'] || 0;
   const highCount = severityStats['high'] || 0;
 
@@ -516,11 +520,12 @@ const App: React.FC = () => {
                       <p className="text-5xl font-extralight">{data.total_alerts || 0}</p>
                       {Object.keys(severityStats).length > 0 && (
                         <div className="flex gap-3 mt-4">
-                          {Object.entries(severityStats).map(([severity, count]) => {
+                          {/* FIX: Use safeEntries helper */}
+                          {safeEntries(severityStats).map(([severity, count]) => {
                             const config = severityConfig[severity as keyof typeof severityConfig] || severityConfig.low;
                             return (
                               <div key={severity} className={`flex items-center gap-1 text-[9px] ${config.color}`}>
-                                <span className="font-bold">{count as number}</span>
+                                <span className="font-bold">{count}</span>
                                 <span className="uppercase opacity-70">{severity}</span>
                               </div>
                             );

@@ -12,6 +12,12 @@ interface ThreatOverviewProps {
   isConnected: boolean;
 }
 
+// FIX: Use 'unknown' instead of 'any' to satisfy ESLint
+const safeEntries = (obj: unknown): [string, number][] => {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.entries(obj as Record<string, number>);
+};
+
 // Source type icons
 const sourceIcons: Record<string, React.ElementType> = {
   suricata: Shield,
@@ -34,12 +40,9 @@ const alertTypeLabels: Record<string, string> = {
   dos_attack: 'DoS Attack',
 };
 
-// FIX: Define this constant to prevent 'never' inference on empty objects
-const EMPTY_STATS: Record<string, number> = {};
-
 export const ThreatOverview: React.FC<ThreatOverviewProps> = ({ 
   alerts, 
-  severityStats = EMPTY_STATS, 
+  severityStats, 
   isConnected 
 }) => {
   // Calculate stats from alerts
@@ -289,7 +292,8 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             <span>Severity Distribution</span>
           </div>
           <div className="flex gap-1 h-3 rounded-full overflow-hidden bg-slate-800">
-            {Object.entries(severityStats).map(([severity, count]) => {
+            {/* FIX: Use safeEntries helper function */}
+            {safeEntries(severityStats).map(([severity, count]) => {
               const total = Object.values(severityStats).reduce((a, b) => a + b, 0);
               const percentage = total > 0 ? (count / total) * 100 : 0;
               if (percentage === 0) return null;
@@ -304,7 +308,8 @@ export const ThreatOverview: React.FC<ThreatOverviewProps> = ({
             })}
           </div>
           <div className="flex justify-between text-[8px] text-slate-600 uppercase">
-            {Object.entries(severityStats).map(([severity, count]) => (
+            {/* FIX: Use safeEntries helper function */}
+            {safeEntries(severityStats).map(([severity, count]) => (
               <span key={severity} className="flex items-center gap-1">
                 <span className={`w-1.5 h-1.5 rounded-full ${severityColors[severity]}`} />
                 {severity}: {count}
