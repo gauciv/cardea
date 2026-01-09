@@ -4,6 +4,8 @@ SQLAlchemy models for Oracle backend data persistence (Async PostgreSQL optimize
 """
 
 import logging
+import os
+import asyncpg
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -35,6 +37,7 @@ class Base(DeclarativeBase):
 # Database engine and session globals
 engine = None
 async_session = None
+POOL = None  # Global raw connection pool
 
 # --- Models ---
 
@@ -177,35 +180,45 @@ class ThreatIntelligence(Base):
 # --- Connection Management ---
 
 async def init_database():
-    """Initialize database connection and create tables"""
-    global engine, async_session
+    """Initialize database connection (ORM and Raw Pool) and create tables"""
+    global engine, async_session, POOL
     
     try:
         db_url = settings.DATABASE_URL
         
-        # 1. ENFORCE ASYNC DRIVER
-        if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # 1. SETUP ORM ENGINE (SQLAlchemy)
+        # Ensure asyncpg driver
+        orm_url = db_url
+        if orm_url.startswith("postgresql://"):
+            orm_url = orm_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         
-        logger.info(f"Connecting to database via: {db_url.split('@')[-1]}")
+        logger.info(f"Connecting to ORM via: {orm_url.split('@')[-1]}")
         
-        # 2. CREATE ENGINE
         engine = create_async_engine(
-            db_url,
+            orm_url,
             echo=False,
             pool_pre_ping=True,
             pool_size=10,
             max_overflow=20
         )
         
-        # 3. CREATE SESSION FACTORY
         async_session = async_sessionmaker(
             engine,
             class_=AsyncSession,
             expire_on_commit=False
         )
         
-        # 4. SYNC TO ASYNC TABLE CREATION
+        # 2. SETUP RAW POOL (asyncpg)
+        # We need the raw URL (postgresql://) not the sqlalchemy one (postgresql+asyncpg://)
+        raw_url = db_url.replace("+asyncpg", "")
+        logger.info("Initializing raw asyncpg connection pool...")
+        POOL = await asyncpg.create_pool(
+            raw_url,
+            min_size=1,
+            max_size=10
+        )
+        
+        # 3. CREATE TABLES
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         
@@ -217,7 +230,7 @@ async def init_database():
 
 @asynccontextmanager
 async def get_db():
-    """FastAPI Dependency - Database session context manager"""
+    """FastAPI Dependency - ORM Session"""
     if async_session is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
     
@@ -231,9 +244,27 @@ async def get_db():
         finally:
             await session.close()
 
+async def get_db_connection():
+    """
+    Returns a raw asyncpg connection from the pool.
+    Used by high-performance endpoints (e.g. device registration).
+    The caller MUST close the connection (release it back to pool).
+    """
+    global POOL
+    if POOL is None:
+        # Fallback initialization
+        await init_database()
+    
+    if POOL is None:
+        raise RuntimeError("Database pool failed to initialize")
+        
+    return await POOL.acquire()
+
 async def close_database():
     """Graceful shutdown for database connections"""
-    global engine
+    global engine, POOL
     if engine:
         await engine.dispose()
-        logger.info("Database connection pool closed.")
+    if POOL:
+        await POOL.close()
+    logger.info("Database connection pools closed.")
