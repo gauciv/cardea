@@ -14,23 +14,50 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Add src to Python path to ensure imports work correctly
-sys.path.insert(0, str(Path(__file__).parent))
+# --- PATH CONFIGURATION & DEBUGGING ---
+# Ensure the directory containing this file is in sys.path
+current_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(current_dir))
 
-# Import Configuration & Database
-from database import init_database
-from config import settings
-
-# Import API Routers
-# We import these directly to ensure the new 'devices' endpoint is registered
-from api import analytics, actions, devices
-
-# Configure logging
+# Configure logging early (default to INFO) so we can see import errors
 logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("cardea.oracle")
+
+# Debug: Print filesystem state (Critical for Azure troubleshooting)
+logger.info(f"📂 Current Working Directory: {os.getcwd()}")
+logger.info(f"🐍 Python Path: {sys.path}")
+try:
+    logger.info(f"📂 Directory contents of {current_dir}: {os.listdir(current_dir)}")
+    if (current_dir / "api").exists():
+        logger.info(f"📂 Directory contents of api: {os.listdir(current_dir / 'api')}")
+    else:
+        logger.warning(f"⚠️ 'api' directory not found in {current_dir}")
+except Exception as e:
+    logger.warning(f"Could not list directories: {e}")
+
+# --- ROBUST IMPORTS ---
+# Try importing normally, fallback to 'src.' prefix if needed (common in Docker)
+try:
+    from database import init_database
+    from config import settings
+    # Import API Routers
+    from api import analytics, actions, devices
+except ImportError as e:
+    logger.warning(f"⚠️ Standard import failed: {e}. Attempting 'src.' fallback...")
+    try:
+        from src.database import init_database
+        from src.config import settings
+        from src.api import analytics, actions, devices
+        logger.info("✅ Recovered using 'src.' prefix imports")
+    except ImportError as e2:
+        logger.critical(f"❌ FATAL: Could not import modules even with fallback: {e2}")
+        sys.exit(1)
+
+# Re-configure logging level if settings loaded successfully
+logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,11 +111,14 @@ async def health_check():
 def main():
     """Main entry point for local execution"""
     try:
-        logger.info(f"🌍 Starting Oracle server on port {settings.PORT}")
+        # Use env var PORT if available (Azure injects this), else config default
+        port = int(os.getenv("PORT", settings.PORT))
+        logger.info(f"🌍 Starting Oracle server on port {port}")
+        
         uvicorn.run(
             "main:app",
             host="0.0.0.0",
-            port=settings.PORT,
+            port=port,
             log_level=settings.LOG_LEVEL.lower(),
             reload=True # Enable auto-reload for development
         )
