@@ -150,7 +150,7 @@ const LoginPage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: verifyToken }),
       });
-
+// test
       const data = await response.json();
       if (response.ok) {
         localStorage.setItem("cardea_auth_token", data.access_token);

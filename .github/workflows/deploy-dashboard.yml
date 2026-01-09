@@ -39,7 +39,7 @@ jobs:
           npm run build
         env:
           # REPLACE with your actual Container App URL
-          VITE_ORACLE_URL: "https://cardea-oracle.gentlemoss-093123.eastus.azurecontainerapps.io"
+          VITE_ORACLE_URL: "https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io"
 
       - name: Azure Login
         uses: azure/login@v1
