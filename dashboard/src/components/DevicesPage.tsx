@@ -72,6 +72,7 @@ export const DevicesPage = () => {
     setError(null);
 
     try {
+      console.log('🔑 Claiming device with code:', claimToken);
       const token = localStorage.getItem('token');
       const res = await axios.post(`${ORACLE_URL}/api/devices/claim`, {
         claim_token: claimToken,
@@ -80,15 +81,22 @@ export const DevicesPage = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      console.log('✅ Device claimed successfully!', res.data);
+
       if (res.data.api_key) {
         setNewDeviceKey(res.data.api_key as string);
         setClaimToken(""); 
         setClaimName("");
-        fetchDevices();
+        
+        // Immediately refresh device list
+        console.log('📋 Refreshing device list...');
+        await fetchDevices();
+        console.log('✅ Device list refreshed');
       } else {
         setError("Device claimed, but no API key returned.");
       }
     } catch (err: unknown) {
+        console.error('❌ Failed to claim device:', err);
         if (axios.isAxiosError(err)) {
             setError(err.response?.data?.detail || "Failed to claim device.");
         } else {

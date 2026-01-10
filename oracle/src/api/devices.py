@@ -246,3 +246,56 @@ async def list_devices() -> List[dict]:
     finally:
         if conn:
             await conn.close()
+
+@router.post("/heartbeat")
+async def device_heartbeat(
+    x_sentry_id: str = Header(..., alias="X-Sentry-ID"),
+    x_sentry_key: str = Header(..., alias="X-Sentry-Key")
+):
+    """
+    Periodic heartbeat from authenticated Sentry devices.
+    Updates device status to ONLINE and last_seen timestamp.
+    """
+    conn = None
+    try:
+        conn = await get_db_connection()
+        logger.info(f"💓 Heartbeat from device: {x_sentry_id}")
+        
+        # Find device by hardware_id and verify API key
+        device = await conn.fetchrow(
+            "SELECT id, api_key, status FROM devices WHERE hardware_id = $1",
+            x_sentry_id
+        )
+        
+        if not device:
+            logger.warning(f"❌ Heartbeat: Device {x_sentry_id} not found")
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        if device["api_key"] != x_sentry_key:
+            logger.warning(f"❌ Heartbeat: Invalid API key for device {x_sentry_id}")
+            raise HTTPException(status_code=403, detail="Invalid API key")
+        
+        # Update device status and last_seen (use UPPERCASE enum value)
+        await conn.execute(
+            """
+            UPDATE devices 
+            SET status = 'ONLINE', 
+                last_seen = NOW(),
+                updated_at = NOW()
+            WHERE hardware_id = $1
+            """,
+            x_sentry_id
+        )
+        
+        logger.info(f"✅ Device {x_sentry_id} heartbeat successful - status: ONLINE")
+        return {"status": "ok", "message": "Heartbeat received"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Heartbeat failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Heartbeat failed: {str(e)}")
+    finally:
+        if conn:
+            await conn.close()

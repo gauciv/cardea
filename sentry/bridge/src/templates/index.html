@@ -530,6 +530,7 @@
                 const data = await res.json();
                 
                 if (res.ok) {
+                    console.log('✅ Setup complete!', data);
                     btn.style.background = 'linear-gradient(to right, #059669, #10b981)';
                     btn.innerHTML = `
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -543,6 +544,7 @@
                         showSuccessModal();
                     }, 500);
                 } else {
+                    console.error('❌ Setup failed:', data);
                     throw new Error(data.detail || 'Setup failed');
                 }
             } catch (err) {

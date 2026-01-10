@@ -463,6 +463,7 @@ const App: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      console.log(`📊 Dashboard update: ${devRes.data.length} device(s) found`);
       setData(res.data);
       setHasDevices(devRes.data.length > 0);
       setError(null);
