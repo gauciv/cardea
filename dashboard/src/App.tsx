@@ -449,23 +449,35 @@ const App: React.FC = () => {
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) return;
 
+    const token = localStorage.getItem('token');
+    
+    // Fetch Devices Check FIRST (independent of analytics)
     try {
-      const token = localStorage.getItem('token');
-      
-      // 1. Fetch Analytics
+      const devRes = await axios.get<Device[]>(`${ORACLE_URL}/api/devices/list`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const deviceCount = Array.isArray(devRes.data) ? devRes.data.length : 0;
+      console.log(`📊 Dashboard update: ${deviceCount} device(s) found`);
+      console.log(`📊 Device data:`, devRes.data);
+      console.log(`📊 Is array?`, Array.isArray(devRes.data));
+      const hasDevicesValue = deviceCount > 0;
+      console.log(`✅ Setting hasDevices to: ${hasDevicesValue}`);
+      setHasDevices(hasDevicesValue);
+      console.log(`✅ hasDevices state should now be: ${hasDevicesValue}`);
+    } catch (devErr) {
+      console.error("❌ Failed to fetch devices:", devErr);
+      // Don't set hasDevices to false on error, keep current state
+    }
+
+    // Then fetch Analytics (can fail independently)
+    try {
       const res = await axios.get<AnalyticsResponse>(
         `${ORACLE_URL}/api/analytics?time_range=today`,
         { timeout: 30000 }
       );
       
-      // 2. Fetch Devices Check
-      const devRes = await axios.get<Device[]>(`${ORACLE_URL}/api/devices/list`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      console.log(`📊 Dashboard update: ${devRes.data.length} device(s) found`);
       setData(res.data);
-      setHasDevices(devRes.data.length > 0);
       setError(null);
       setIsConnected(true);
       setLastUpdate(new Date());
@@ -474,7 +486,7 @@ const App: React.FC = () => {
       // Reset retry count on success
       retryCountRef.current = 0;
     } catch (err) {
-      console.error("Oracle API Error:", err);
+      console.error("Oracle Analytics API Error:", err);
       setIsConnected(false);
       
       // Increment ref instead of state
@@ -487,7 +499,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, ORACLE_URL]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -496,6 +508,11 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [fetchData, isAuthenticated]);
+
+  // Debug: Log hasDevices changes
+  useEffect(() => {
+    console.log(`🔍 hasDevices state changed to: ${hasDevices} (type: ${typeof hasDevices})`);
+  }, [hasDevices]);
 
   useEffect(() => {
     document.title = "Cardea | Dashboard";
@@ -646,6 +663,7 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-6">
         
         {/* === ONBOARDING STATE === */}
+        {/* DEBUG: hasDevices={String(hasDevices)}, isLoading={String(isLoading)} */}
         {hasDevices === false && !isLoading ? (
           <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center max-w-2xl mx-auto">
             <div className="flex flex-col items-center gap-4 mb-6">
