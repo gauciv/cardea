@@ -16,8 +16,7 @@ import {
   RefreshCw,
   Eye,
   BarChart3,
-  Plus,
-  ArrowRight
+  Plus
 } from "lucide-react";
 import type { AnalyticsResponse, Alert, AIInsight, Device } from "./types";
 import { ThreatOverview } from "./components/ThreatOverview";
