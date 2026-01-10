@@ -585,45 +585,52 @@ const App: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() =>
-                setViewMode(viewMode === "simple" ? "detailed" : "simple")
-              }
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                viewMode === "detailed"
-                  ? "bg-cyan-900/40 text-cyan-400 border border-cyan-800/50"
-                  : "bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800"
-              }`}
-              title={
-                viewMode === "simple"
-                  ? "Show technical details"
-                  : "Hide technical details"
-              }
-            >
-              {viewMode === "detailed" ? (
-                <>
-                  <BarChart3 className="w-3.5 h-3.5" /> Technical View
-                </>
-              ) : (
-                <>
-                  <Eye className="w-3.5 h-3.5" /> Simple View
-                </>
-              )}
-            </button>
+            {/* Only show view toggle when devices are connected */}
+            {hasDevices === true && (
+              <button
+                onClick={() =>
+                  setViewMode(viewMode === "simple" ? "detailed" : "simple")
+                }
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  viewMode === "detailed"
+                    ? "bg-cyan-900/40 text-cyan-400 border border-cyan-800/50"
+                    : "bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800"
+                }`}
+                title={
+                  viewMode === "simple"
+                    ? "Show technical details"
+                    : "Hide technical details"
+                }
+              >
+                {viewMode === "detailed" ? (
+                  <>
+                    <BarChart3 className="w-3.5 h-3.5" /> Technical View
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-3.5 h-3.5" /> Simple View
+                  </>
+                )}
+              </button>
+            )}
 
             <div className="flex items-center gap-6 text-[10px] font-bold text-slate-500 tracking-widest uppercase">
-              {isConnected && (criticalCount > 0 || highCount > 0) && (
+              {/* Only show alert count when devices are connected */}
+              {hasDevices === true && isConnected && (criticalCount > 0 || highCount > 0) && (
                 <span className="flex items-center gap-1.5 text-red-500">
                   <AlertTriangle className="w-3 h-3" />
                   {criticalCount + highCount} Critical/High Alerts
                 </span>
               )}
-              <ConnectionStatus
-                isConnected={isConnected}
-                // Check if disconnected and retry count > 0 (using ref)
-                isRetrying={!isConnected && retryCountRef.current > 0}
-              />
-              {lastUpdate && isConnected && (
+              {/* Only show connection status when devices exist or when checking */}
+              {(hasDevices === true || hasDevices === null) && (
+                <ConnectionStatus
+                  isConnected={isConnected}
+                  // Check if disconnected and retry count > 0 (using ref)
+                  isRetrying={!isConnected && retryCountRef.current > 0}
+                />
+              )}
+              {lastUpdate && isConnected && hasDevices === true && (
                 <span className="text-slate-600">
                   Updated:{" "}
                   {lastUpdate.toLocaleTimeString([], { hour12: false })}
@@ -640,14 +647,14 @@ const App: React.FC = () => {
         
         {/* === ONBOARDING STATE === */}
         {hasDevices === false && !isLoading ? (
-          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-cyan-500/10 rounded-lg border border-cyan-500/20 flex items-center justify-center">
-                <Server className="w-6 h-6 text-cyan-400" />
+          <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-8 text-center max-w-2xl mx-auto">
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <div className="w-16 h-16 bg-cyan-500/10 rounded-xl border border-cyan-500/20 flex items-center justify-center">
+                <Server className="w-8 h-8 text-cyan-400" />
               </div>
-              <div className="text-left">
-                <h2 className="text-xl font-semibold text-white">No Devices Connected</h2>
-                <p className="text-sm text-slate-400">Connect a Sentry device to start monitoring</p>
+              <div>
+                <h2 className="text-2xl font-semibold text-white mb-2">No Devices Connected</h2>
+                <p className="text-sm text-slate-400">Connect a Sentry device to start monitoring your network</p>
               </div>
             </div>
             
@@ -680,7 +687,7 @@ const App: React.FC = () => {
               Connect Device
             </Link>
           </div>
-        ) : (
+        ) : hasDevices === true ? (
           /* === DASHBOARD CONTENT === */
           <>
             <AIInsightCard
@@ -977,7 +984,7 @@ const App: React.FC = () => {
               </>
             )}
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );

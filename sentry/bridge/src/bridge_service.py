@@ -826,6 +826,8 @@ async def reset_setup():
         bridge_service.api_key = None
         bridge_service.is_setup_mode = True
         bridge_service.connected_devices_count = 0
+        # Set claim token to demo code (or None if not in demo mode)
+        bridge_service.claim_token = DEMO_CLAIM_CODE if DEMO_MODE else None
         
         # Clear Oracle client API key
         bridge_service.oracle_client.update_api_key(None)
@@ -834,10 +836,12 @@ async def reset_setup():
         return {
             "status": "reset", 
             "message": "Device unregistered successfully. Ready for new pairing.",
-            "claim_token": DEMO_CLAIM_CODE if DEMO_MODE else "Connecting..."
+            "claim_token": bridge_service.claim_token or "Connecting..."
         }
     except Exception as e:
         logger.error(f"❌ Reset failed: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Reset failed: {str(e)}")
 
 # --- END SETUP MODE ENDPOINTS ---
