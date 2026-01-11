@@ -21,12 +21,10 @@ class ActionRequest(BaseModel):
 async def execute_action(req: ActionRequest):
     """
     Executes a security action (e.g., Block IP, Isolate Device).
-    For MVP, this just logs the action and returns success.
     """
     logger.info(f"⚡ EXECUTING ACTION: {req.action_type} on {req.target}")
     
-    # In a real scenario, this would talk to the firewall or switch
-    # For now, we simulate success
+    # TODO: Integrate with firewall/switch API
     
     return {
         "success": True,

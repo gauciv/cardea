@@ -40,12 +40,7 @@ ORACLE_URL = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000") # Base URL
 DATA_DIR = Path("/app/data")
 CONFIG_FILE = DATA_DIR / "sentry_config.json"
 
-# ============ DEMO MODE CONFIGURATION ============
-# For the demo, we use a hardcoded claim code instead of dynamic Oracle registration
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
-DEMO_CLAIM_CODE = "SN7-K2M"  # Realistic device pairing code format
-
-# --- PLATFORM DETECTION LOGIC (PRESERVED) ---
+# --- PLATFORM DETECTION LOGIC ---
 
 class EnhancedPlatformDetector:
     def __init__(self):
@@ -272,14 +267,11 @@ class BridgeService:
         
         # Setup Mode State
         self.is_setup_mode = self.api_key is None
-        self.claim_token = DEMO_CLAIM_CODE if DEMO_MODE else None  # Use hardcoded code for demo
+        self.claim_token = None  # Will be set by Oracle registration
         self.connected_devices_count = 1 if not self.is_setup_mode else 0
         
         if self.is_setup_mode:
-            if DEMO_MODE:
-                logger.warning(f"⚠️ DEMO SETUP MODE: Use code '{DEMO_CLAIM_CODE}' on Dashboard")
-            else:
-                logger.warning(f"⚠️ SETUP MODE: Sentry {self.hardware_id} waiting for claim...")
+            logger.warning(f"⚠️ SETUP MODE: Sentry {self.hardware_id} waiting for claim...")
         else:
             logger.info(f"✅ Sentry Online: {self.sentry_id}")
             self.oracle_client.update_api_key(self.api_key)
@@ -381,17 +373,16 @@ class BridgeService:
             self.oracle_client.update_api_key(api_key)
             self.is_setup_mode = False
             self.claim_token = None
-            self.connected_devices_count = 1  # Mark as connected for demo
+            self.connected_devices_count = 1
             
             logger.info(f"💾 API key saved locally")
             
-            # Immediately register with Oracle using heartbeat
+            # Register with Oracle using heartbeat
             logger.info(f"📡 Registering with Oracle...")
             heartbeat_success = await self.oracle_client.send_heartbeat(self.hardware_id)
             
             if heartbeat_success:
                 logger.info(f"✅ Sentry registered with Oracle! Device is now ONLINE")
-                logger.info(f"🎉 Sentry configured successfully! Connected devices: 1")
             else:
                 logger.warning(f"⚠️ Heartbeat failed, but API key saved. Device may appear offline.")
             
@@ -414,9 +405,8 @@ class BridgeService:
         return {
             "configured": False,
             "hardware_id": self.hardware_id,
-            "claim_token": self.claim_token or (DEMO_CLAIM_CODE if DEMO_MODE else "Connecting..."),
-            "oracle_url": ORACLE_URL,
-            "demo_mode": DEMO_MODE
+            "claim_token": self.claim_token or "Registering...",
+            "oracle_url": ORACLE_URL
         }
         
     def _setup_data_paths(self):
@@ -529,15 +519,13 @@ zeek_notice_monitor = get_notice_monitor(handle_zeek_notice_alert)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"🌉 Bridge Service Online [ID: {bridge_service.hardware_id}]")
-    if DEMO_MODE:
-        logger.info(f"📋 DEMO MODE: Use pairing code '{DEMO_CLAIM_CODE}' on Dashboard")
     
     # Start Zeek notice monitoring
     notice_task = asyncio.create_task(zeek_notice_monitor.start())
     
-    # Start Registration Polling ONLY if in setup mode AND not in demo mode
+    # Start Registration Polling if in setup mode
     reg_task = None
-    if bridge_service.is_setup_mode and not DEMO_MODE:
+    if bridge_service.is_setup_mode:
         reg_task = asyncio.create_task(bridge_service._poll_registration_status())
     
     yield
@@ -770,10 +758,6 @@ async def get_zeek_notice_stats():
 
 # --- SETUP MODE / DEVICE AUTHORIZATION ENDPOINTS ---
 
-class PairingClaimRequest(BaseModel):
-    """Request body for claiming/simulating pairing"""
-    code: str
-
 @app.get("/api/setup/status")
 async def get_setup_status():
     """
@@ -782,75 +766,30 @@ async def get_setup_status():
     """
     return bridge_service.get_setup_status()
 
-@app.post("/api/setup/simulate_claim")
-async def simulate_claim(request: PairingClaimRequest):
-    """
-    TEMPORARY: Simulates the Oracle claim process for testing.
-    In production, this would be handled by the Oracle backend.
-    
-    Accepts the pairing code and if it matches, generates fake credentials.
-    """
-    if not bridge_service.is_setup_mode:
-        raise HTTPException(
-            status_code=400, 
-            detail="Sentry is already configured"
-        )
-    
-    # Normalize input code (strip whitespace, uppercase)
-    input_code = request.code.strip().upper()
-    
-    if input_code != bridge_service.pairing_code:
-        logger.warning(f"⚠️ Invalid pairing attempt: {input_code}")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid pairing code"
-        )
-    
-    # Generate simulated credentials (In production, Oracle provides these)
-    sentry_id = f"sentry-{uuid.uuid4().hex[:8]}"
-    api_key = f"sk-{uuid.uuid4().hex}"
-    
-    if bridge_service.complete_pairing(sentry_id, api_key):
-        logger.info(f"🎉 Simulated pairing successful: {sentry_id}")
-        return {
-            "status": "success",
-            "sentry_id": sentry_id,
-            "message": "Sentry is now configured and ready"
-        }
-    else:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to save configuration"
-        )
-
 @app.post("/api/setup/reset")
 async def reset_setup():
     """
-    Resets the sentry to setup mode for demo purposes.
+    Resets the sentry to setup mode.
     Deletes the config file and clears API key, allowing re-pairing.
     """
     try:
-        # Delete config file if exists
         if bridge_service.config_path.exists():
             bridge_service.config_path.unlink()
             logger.info("🗑️ Deleted config file")
         
-        # Reset service state
         bridge_service.sentry_id = bridge_service.hardware_id
         bridge_service.api_key = None
         bridge_service.is_setup_mode = True
         bridge_service.connected_devices_count = 0
-        # Set claim token to demo code (or None if not in demo mode)
-        bridge_service.claim_token = DEMO_CLAIM_CODE if DEMO_MODE else None
+        bridge_service.claim_token = None
         
-        # Clear Oracle client API key
         bridge_service.oracle_client.update_api_key(None)
         
         logger.info("🔄 Sentry reset to setup mode - ready for re-pairing")
         return {
             "status": "reset", 
             "message": "Device unregistered successfully. Ready for new pairing.",
-            "claim_token": bridge_service.claim_token or "Connecting..."
+            "claim_token": "Registering..."
         }
     except Exception as e:
         logger.error(f"❌ Reset failed: {e}")

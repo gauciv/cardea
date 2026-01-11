@@ -85,14 +85,12 @@ export async function getCurrentUser(): Promise<UserInfo | null> {
       };
     } catch (e) {
       console.error('Failed to parse local user:', e);
-      // If data is corrupted, clear it
       localStorage.removeItem('cardea_auth_token');
       localStorage.removeItem('cardea_user');
     }
   }
   
-  // STRATEGY 3: Dev Fallback (Mock Data)
-  // Only use this if NOT hosted and NO local token exists
+  // STRATEGY 3: Local Dev Auth
   if (!isAzureHosted()) {
     const devAuth = localStorage.getItem('cardea_dev_auth');
     if (devAuth === 'true') {
@@ -104,7 +102,7 @@ export async function getCurrentUser(): Promise<UserInfo | null> {
           userDetails: parsed.email || 'dev@cardea.local',
           userRoles: ['authenticated', 'admin'],
           identityProvider: 'dev',
-          claims: { name: parsed.name || 'Dev User' }
+          claims: { name: parsed.name || 'Local User' }
         };
       }
     }
@@ -121,8 +119,8 @@ export function login(provider: 'microsoft' | 'google' | 'github', redirectPath:
     localStorage.setItem('cardea_dev_auth', 'true');
     localStorage.setItem('cardea_dev_provider', provider);
     localStorage.setItem('cardea_dev_user', JSON.stringify({
-      name: 'Demo User',
-      email: `demo@${provider}.com`,
+      name: 'Local User',
+      email: `user@${provider}.local`,
       provider
     }));
     window.location.href = redirectPath;

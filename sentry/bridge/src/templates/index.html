@@ -10,8 +10,7 @@
           data-sentry-id="{{ setup_status.sentry_id }}"
           data-claim-token="{{ setup_status.claim_token }}"
           data-oracle-url="{{ setup_status.oracle_url }}"
-          data-connected-devices="{{ setup_status.connected_devices | default(0) }}"
-          data-demo-mode="{{ 'true' if setup_status.demo_mode else 'false' }}">
+          data-connected-devices="{{ setup_status.connected_devices | default(0) }}">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -167,7 +166,7 @@
                                 <i data-lucide="key" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"></i>
                                 <input type="password" id="api_key" required
                                        class="w-full bg-slate-950/80 border border-slate-700 rounded-xl py-3.5 pl-11 pr-4 text-slate-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all font-mono text-sm placeholder:text-slate-600"
-                                       placeholder="sk-demo-...">
+                                       placeholder="sk-...">
                             </div>
                             
                             <button type="submit" id="submit-btn" 
@@ -277,12 +276,12 @@
                         <span class="font-semibold text-white">{{ setup_status.connected_devices | default(1) }}</span> device
                     </span>
                 </div>
-                <!-- Reset Button (Demo Only) -->
+                <!-- Reset Button -->
                 {% if setup_status.configured %}
                 <button 
                     onclick="resetDevice()" 
                     class="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-orange-500/20 border border-slate-700 hover:border-orange-500/50 rounded-lg text-slate-400 hover:text-orange-400 transition-all text-sm"
-                    title="Unregister device for demo reset"
+                    title="Unregister device"
                 >
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                     <span class="hidden md:inline">Reset</span>
@@ -400,8 +399,7 @@
             id: configMeta.dataset.sentryId,
             claimToken: configMeta.dataset.claimToken,
             oracleUrl: configMeta.dataset.oracleUrl,
-            connectedDevices: parseInt(configMeta.dataset.connectedDevices || '0'),
-            demoMode: configMeta.dataset.demoMode === 'true'
+            connectedDevices: parseInt(configMeta.dataset.connectedDevices || '0')
         };
 
         // Initialize Icons
@@ -461,7 +459,7 @@
             }
         }
 
-        // Reset device function (for demo)
+        // Reset device function
         async function resetDevice() {
             if (!confirm("Are you sure you want to unregister this device? It will return to setup mode and you'll need to pair it again.")) {
                 return;

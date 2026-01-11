@@ -52,9 +52,8 @@ class SentryStatus:
     async def _check_zeek(self):
         """Check Zeek service health"""
         try:
-            # In a real implementation, this would check Zeek logs or process
-            # For now, simulate based on file existence or process check
-            self.service_status["zeek"]["healthy"] = True  # Placeholder
+            # TODO: Check Zeek logs or process status
+            self.service_status["zeek"]["healthy"] = True
             self.service_status["zeek"]["last_check"] = datetime.now()
         except Exception as e:
             logger.warning(f"Zeek health check failed: {e}")

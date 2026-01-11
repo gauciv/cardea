@@ -329,8 +329,8 @@ const LoginPage: React.FC = () => {
         localStorage.setItem(
           "cardea_dev_user",
           JSON.stringify({
-            name: "Demo User",
-            email: `demo@${provider}.com`,
+            name: "Local User",
+            email: `user@${provider}.local`,
             provider,
           })
         );

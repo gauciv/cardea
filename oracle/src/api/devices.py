@@ -1,22 +1,13 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
-import uuid
 import secrets
 import logging
 import traceback
-import os
 
-# Configure logger
 logger = logging.getLogger("cardea.oracle.devices")
 
-# ============ DEMO MODE CONFIGURATION ============
-# For the demo, we accept a hardcoded claim code instead of requiring pre-registration
-DEMO_MODE = os.getenv("DEMO_MODE", "true").lower() == "true"
-DEMO_CLAIM_CODE = "SN7-K2M"  # Must match the Sentry Bridge's code
-
-# Try-except block allows this to run if 'database' is a sibling or in src
 try:
     from database import get_db_connection
 except ImportError:
@@ -35,35 +26,33 @@ class DeviceClaimRequest(BaseModel):
     friendly_name: str
 
 class DeviceResponse(BaseModel):
-    id: int  # FIXED: Database uses integer primary key
+    id: int
     hardware_id: str
-    friendly_name: Optional[str] = None  # FIXED: Can be NULL in database
+    friendly_name: Optional[str] = None
     status: str
     last_seen: Optional[datetime] = None
     ip_address: Optional[str] = None
-    version: Optional[str] = "1.0.0"  # Default if missing
+    version: Optional[str] = "1.0.0"
     
     class Config:
-        from_attributes = True  # Pydantic v2 - allows ORM objects
+        from_attributes = True
 
 # --- ENDPOINTS ---
 
 @router.post("/register")
 async def register_device(req: DeviceRegisterRequest):
     """
-    Called by the Sentry device on startup.
-    Generates a Claim Token if the device is new.
+    Called by Sentry device on startup.
+    Generates a Claim Token if device is new.
     """
     conn = await get_db_connection()
     try:
-        # Check if device exists
         existing = await conn.fetchrow(
             "SELECT id, status, claim_token FROM devices WHERE hardware_id = $1", 
             req.hardware_id
         )
 
         if existing:
-            # Update last_seen
             await conn.execute(
                 "UPDATE devices SET last_seen = NOW(), version = $1 WHERE hardware_id = $2",
                 req.version, req.hardware_id
@@ -74,12 +63,10 @@ async def register_device(req: DeviceRegisterRequest):
                 "message": "Device check-in successful"
             }
         
-        # Register new device
-        # Generate a 6-digit claim token (e.g., "AB3-9K2")
-        claim_token = secrets.token_hex(3).upper() 
+        # Generate claim token (e.g., "AB3-9K2")
+        claim_token = secrets.token_hex(3).upper()
         claim_token = f"{claim_token[:3]}-{claim_token[3:]}"
         
-        # FIXED: Use UPPERCASE enum values + include device_type
         await conn.execute(
             """
             INSERT INTO devices (hardware_id, friendly_name, status, device_type, claim_token, version, last_seen, created_at)
@@ -99,65 +86,17 @@ async def register_device(req: DeviceRegisterRequest):
 @router.post("/claim")
 async def claim_device(req: DeviceClaimRequest):
     """
-    Called by the Dashboard user to link a device to their account.
-    
-    DEMO MODE: Accepts hardcoded "SN7-K2M" code and auto-creates a device.
-    PRODUCTION MODE: Requires device to be pre-registered with matching claim_token.
+    Called by Dashboard user to link a device to their account.
+    Validates claim_token from pre-registered device.
     """
-    logger.info(f"📱 Claim request received: code='{req.claim_token}', name='{req.friendly_name}'")
-    logger.info(f"🔧 DEMO_MODE={DEMO_MODE}, expected code='{DEMO_CLAIM_CODE}'")
+    logger.info(f"📱 Claim request: code='{req.claim_token}', name='{req.friendly_name}'")
     
     conn = None
     try:
         conn = await get_db_connection()
-        # Normalize input code (strip whitespace, uppercase)
         input_code = req.claim_token.strip().upper()
         
-        # ============ DEMO MODE: Auto-create device with hardcoded code ============
-        if DEMO_MODE and input_code == DEMO_CLAIM_CODE:
-            logger.info(f"🎯 DEMO MODE: Accepting demo claim code '{input_code}'")
-            
-            # Check if a demo device already exists (use UPPERCASE enum value)
-            existing_demo = await conn.fetchrow(
-                "SELECT id, api_key FROM devices WHERE hardware_id LIKE 'demo-%' AND status = 'ONLINE' LIMIT 1"
-            )
-            
-            if existing_demo and existing_demo["api_key"]:
-                # Return existing demo device's API key
-                logger.info(f"🔄 Returning existing demo device: {existing_demo['id']}")
-                return {
-                    "success": True,
-                    "device_id": str(existing_demo["id"]),
-                    "api_key": existing_demo["api_key"],
-                    "message": "Demo device already configured - returning existing API key"
-                }
-            
-            # Create a new demo device (let PostgreSQL auto-generate the ID)
-            hardware_id = f"demo-{secrets.token_hex(6)}"
-            api_key = f"sk-demo-{secrets.token_urlsafe(32)}"
-            friendly_name = req.friendly_name or "Demo Sentry"
-            
-            # Insert and return the auto-generated ID
-            # Note: Use UPPERCASE enum values to match PostgreSQL enum definition
-            result = await conn.fetchrow(
-                """
-                INSERT INTO devices (hardware_id, friendly_name, status, device_type, api_key, version, last_seen, created_at)
-                VALUES ($1, $2, 'ONLINE', 'SENTRY_PI', $3, '1.0.0', NOW(), NOW())
-                RETURNING id
-                """,
-                hardware_id, friendly_name, api_key
-            )
-            
-            new_id = result["id"] if result else "unknown"
-            logger.info(f"🎉 DEMO: Created demo device {hardware_id} with id={new_id}")
-            return {
-                "success": True,
-                "device_id": str(new_id),
-                "api_key": api_key,
-                "message": "Demo device created successfully"
-            }
-        
-        # ============ PRODUCTION MODE: Find device by claim token ============
+        # Find device by claim token
         device = await conn.fetchrow(
             "SELECT id, hardware_id FROM devices WHERE claim_token = $1 AND status = 'UNCLAIMED'",
             input_code
@@ -166,10 +105,9 @@ async def claim_device(req: DeviceClaimRequest):
         if not device:
             raise HTTPException(status_code=404, detail="Invalid or expired claim token")
 
-        # Generate a permanent API Key for the device
+        # Generate permanent API Key
         api_key = f"sk-{secrets.token_urlsafe(32)}"
         
-        # Update device status and API key (use UPPERCASE enum value)
         await conn.execute(
             """
             UPDATE devices 
@@ -183,16 +121,17 @@ async def claim_device(req: DeviceClaimRequest):
             req.friendly_name, api_key, device["id"]
         )
         
+        logger.info(f"✅ Device {device['hardware_id']} claimed successfully")
         return {
             "success": True,
-            "device_id": device["id"],
+            "device_id": str(device["id"]),
             "api_key": api_key,
             "message": "Device claimed successfully"
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Claim device failed: {e}")
+        logger.error(f"❌ Claim failed: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to claim device: {str(e)}")
     finally:
@@ -201,35 +140,25 @@ async def claim_device(req: DeviceClaimRequest):
 
 @router.get("/list")
 async def list_devices() -> List[dict]:
-    """
-    Called by Dashboard to show user's devices.
-    Hardened to handle database drift and prevent 500 errors.
-    
-    NOTE: Returns raw dicts to avoid Pydantic validation issues with DB types.
-    """
+    """Returns all devices for the Dashboard."""
     conn = None
     try:
         conn = await get_db_connection()
-        logger.info("📋 Fetching device list...")
-        
-        # FIXED: Querying 'friendly_name' instead of 'name'
-        # Added NULLS LAST to ensure active devices appear at the top
         rows = await conn.fetch("""
             SELECT id, hardware_id, friendly_name, status, last_seen, ip_address, version 
             FROM devices 
             ORDER BY last_seen DESC NULLS LAST
         """)
         
-        # Convert to list of dicts with proper type handling
         devices = []
         for row in rows:
             device_name = row["friendly_name"] or "Unnamed Device"
             devices.append({
-                "id": str(row["id"]),  # Convert to string for frontend compatibility
+                "id": str(row["id"]),
                 "hardware_id": row["hardware_id"] or "",
-                "friendly_name": device_name,  # For new frontend code
-                "name": device_name,  # COMPAT: Old frontend code uses 'name'
-                "status": (row["status"] or "unknown").lower(),  # Lowercase for frontend enum
+                "friendly_name": device_name,
+                "name": device_name,
+                "status": (row["status"] or "unknown").lower(),
                 "last_seen": row["last_seen"].isoformat() if row["last_seen"] else None,
                 "ip_address": row["ip_address"],
                 "version": row["version"] or "1.0.0"
@@ -239,9 +168,8 @@ async def list_devices() -> List[dict]:
         return devices
         
     except Exception as e:
-        logger.error(f"❌ Device List Endpoint failed: {e}")
+        logger.error(f"❌ Device list failed: {e}")
         traceback.print_exc()
-        # Return empty list rather than crashing with 500
         return []
     finally:
         if conn:
@@ -252,42 +180,31 @@ async def device_heartbeat(
     x_sentry_id: str = Header(..., alias="X-Sentry-ID"),
     x_sentry_key: str = Header(..., alias="X-Sentry-Key")
 ):
-    """
-    Periodic heartbeat from authenticated Sentry devices.
-    Updates device status to ONLINE and last_seen timestamp.
-    """
+    """Periodic heartbeat from authenticated Sentry devices."""
     conn = None
     try:
         conn = await get_db_connection()
-        logger.info(f"💓 Heartbeat from device: {x_sentry_id}")
         
-        # Find device by hardware_id and verify API key
         device = await conn.fetchrow(
             "SELECT id, api_key, status FROM devices WHERE hardware_id = $1",
             x_sentry_id
         )
         
         if not device:
-            logger.warning(f"❌ Heartbeat: Device {x_sentry_id} not found")
             raise HTTPException(status_code=404, detail="Device not found")
         
         if device["api_key"] != x_sentry_key:
-            logger.warning(f"❌ Heartbeat: Invalid API key for device {x_sentry_id}")
             raise HTTPException(status_code=403, detail="Invalid API key")
         
-        # Update device status and last_seen (use UPPERCASE enum value)
         await conn.execute(
             """
             UPDATE devices 
-            SET status = 'ONLINE', 
-                last_seen = NOW(),
-                updated_at = NOW()
+            SET status = 'ONLINE', last_seen = NOW(), updated_at = NOW()
             WHERE hardware_id = $1
             """,
             x_sentry_id
         )
         
-        logger.info(f"✅ Device {x_sentry_id} heartbeat successful - status: ONLINE")
         return {"status": "ok", "message": "Heartbeat received"}
         
     except HTTPException:

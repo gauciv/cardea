@@ -678,12 +678,11 @@ def create_app() -> FastAPI:
             "enhanced_monitoring": monitoring is not None,
             "dismissed_count": len(dismissed),
             "actions": actions,
-            "dismissed": dismissed[:10],  # Last 10 dismissals
-            "message": "These are REAL actions stored in Redis, not fake data."
+            "dismissed": dismissed[:10]
         }
     
     # ===========================================
-    # SECURITY ACTION ENDPOINTS - Real execution
+    # SECURITY ACTION ENDPOINTS
     # ===========================================
     
     @app.post("/api/actions/execute")
