@@ -357,7 +357,7 @@ class BridgeService:
                 # This happens if device was partially claimed but config was lost
                 logger.warning("⚠️ Device exists in Oracle but no claim token returned - may need Oracle fix")
                 if not self.claim_token:
-                    self.claim_token = f"LOCAL-{self.hardware_id[-6:].upper()}"
+                    self.claim_token = self._generate_fallback_code()
                     logger.warning(f"⚠️ Using local fallback code: {self.claim_token}")
             else:
                 logger.info(f"📋 Registration response: {response}")
@@ -365,8 +365,14 @@ class BridgeService:
             logger.error(f"❌ Oracle registration failed: {e}")
             # Generate local fallback code if Oracle unreachable
             if not self.claim_token:
-                self.claim_token = f"LOCAL-{self.hardware_id[-6:].upper()}"
+                self.claim_token = self._generate_fallback_code()
                 logger.warning(f"⚠️ Using local fallback code: {self.claim_token}")
+
+    def _generate_fallback_code(self) -> str:
+        """Generate a 6-char fallback pairing code like 'A3K-9M2'"""
+        chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        code = ''.join(random.choice(chars) for _ in range(6))
+        return f"{code[:3]}-{code[3:]}"
 
     async def _poll_registration_status(self):
         """Background loop to register with Oracle and refresh status"""
