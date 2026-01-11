@@ -71,8 +71,8 @@ async def register_device(req: DeviceRegisterRequest):
             
             status = existing["status"].lower() if existing["status"] else "unknown"
             
-            # If already claimed/online, don't return claim token
-            if status in ("online", "offline") and existing["api_key"]:
+            # If already claimed (has api_key), don't return claim token
+            if existing["api_key"]:
                 logger.info(f"✅ Device {req.hardware_id} already claimed")
                 return {
                     "status": status,
@@ -80,11 +80,20 @@ async def register_device(req: DeviceRegisterRequest):
                     "message": "Device already registered"
                 }
             
-            # If unclaimed, return existing claim token
-            logger.info(f"🔑 Device {req.hardware_id} unclaimed, returning token")
+            # Device exists but not claimed (no api_key) - return/regenerate claim token
+            claim_token = existing["claim_token"]
+            if not claim_token:
+                # Regenerate claim token if missing
+                claim_token = generate_pairing_code()
+                await conn.execute(
+                    "UPDATE devices SET claim_token = $1, status = 'UNCLAIMED' WHERE hardware_id = $2",
+                    claim_token, req.hardware_id
+                )
+            
+            logger.info(f"🔑 Device {req.hardware_id} unclaimed, returning token: {claim_token}")
             return {
                 "status": "unclaimed",
-                "claim_token": existing["claim_token"],
+                "claim_token": claim_token,
                 "message": "Device awaiting claim"
             }
         

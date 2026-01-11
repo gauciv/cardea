@@ -352,9 +352,13 @@ class BridgeService:
             if response.get("claim_token"):
                 self.claim_token = response.get("claim_token")
                 logger.info(f"🔑 Pairing Code: {self.claim_token}")
-            elif response.get("status") == "online":
-                # Device already claimed but we lost config - need re-pairing
-                logger.warning("⚠️ Device registered but no local API key - needs re-pairing")
+            elif response.get("status") in ("online", "offline") and not response.get("claim_token"):
+                # Device exists in Oracle but we're in setup mode - Oracle should give us a new token
+                # This happens if device was partially claimed but config was lost
+                logger.warning("⚠️ Device exists in Oracle but no claim token returned - may need Oracle fix")
+                if not self.claim_token:
+                    self.claim_token = f"LOCAL-{self.hardware_id[-6:].upper()}"
+                    logger.warning(f"⚠️ Using local fallback code: {self.claim_token}")
             else:
                 logger.info(f"📋 Registration response: {response}")
         except Exception as e:
@@ -377,6 +381,17 @@ class BridgeService:
     async def save_configuration(self, api_key: str):
         """Complete setup by saving the API Key and registering with Oracle"""
         try:
+            # First, validate the API key by sending a heartbeat BEFORE saving
+            self.oracle_client.update_api_key(api_key)
+            logger.info(f"📡 Validating API key with Oracle...")
+            heartbeat_success = await self.oracle_client.send_heartbeat(self.hardware_id)
+            
+            if not heartbeat_success:
+                logger.error(f"❌ API key validation failed - key may be invalid or device not claimed")
+                self.oracle_client.update_api_key(None)  # Reset the key
+                return False
+            
+            # API key is valid, now save configuration
             config = {
                 "sentry_id": self.hardware_id,
                 "api_key": api_key,
@@ -386,7 +401,6 @@ class BridgeService:
             self.config_path.write_text(json.dumps(config, indent=2))
             
             self.api_key = api_key
-            self.oracle_client.update_api_key(api_key)
             self.is_setup_mode = False
             self.claim_token = None
             self.connected_devices_count = 1
@@ -413,17 +427,7 @@ class BridgeService:
             })
             accounts_file.write_text(json.dumps(accounts, indent=2))
             
-            logger.info(f"💾 API key saved locally")
-            
-            # Register with Oracle using heartbeat
-            logger.info(f"📡 Registering with Oracle...")
-            heartbeat_success = await self.oracle_client.send_heartbeat(self.hardware_id)
-            
-            if heartbeat_success:
-                logger.info(f"✅ Sentry registered with Oracle! Device is now ONLINE")
-            else:
-                logger.warning(f"⚠️ Heartbeat failed, but API key saved. Device may appear offline.")
-            
+            logger.info(f"✅ Sentry registered with Oracle! Device is now ONLINE")
             return True
         except Exception as e:
             logger.error(f"❌ Config save failed: {e}")
@@ -829,11 +833,14 @@ async def reset_setup():
         
         bridge_service.oracle_client.update_api_key(None)
         
+        # Re-register with Oracle to get a new claim token
+        await bridge_service.register_with_oracle()
+        
         logger.info("🔄 Sentry reset to setup mode")
         return {
             "status": "reset", 
             "message": "Device unregistered successfully. Ready for new pairing.",
-            "claim_token": "Registering..."
+            "claim_token": bridge_service.claim_token or "Registering..."
         }
     except Exception as e:
         logger.error(f"❌ Reset failed: {e}")
@@ -853,7 +860,7 @@ async def complete_setup(data: dict):
     if not api_key:
         raise HTTPException(status_code=400, detail="API Key required")
     
-    logger.info(f"🔑 Received API key submission, registering device...")
+    logger.info(f"🔑 Received API key submission, validating with Oracle...")
     
     try:
         success = await bridge_service.save_configuration(api_key)
@@ -865,7 +872,10 @@ async def complete_setup(data: dict):
                 "connected_devices": 1
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to save configuration")
+            logger.error(f"❌ API key validation failed")
+            raise HTTPException(status_code=400, detail="Invalid API key. Please check the key and try again.")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Setup completion failed: {e}")
         import traceback
