@@ -2,6 +2,11 @@
 
 @import "tailwindcss";
 
+/* Base styles */
+html, body {
+  background-color: rgb(2, 6, 23); /* slate-950 */
+}
+
 /* Hide scrollbar globally */
 html {
   scrollbar-width: none;

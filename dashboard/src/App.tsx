@@ -119,8 +119,8 @@ const AIInsightCard: React.FC<{ insight: AIInsight | null | undefined; isLoading
 };
 
 // Empty State for No Devices
-const NoDevicesState: React.FC<{ showOnboarding: boolean; onboardingStep: number; onNextStep: () => void; onSkip: () => void }> = ({ showOnboarding, onboardingStep, onNextStep, onSkip }) => (
-  <div className="max-w-lg mx-auto text-center py-12">
+const NoDevicesState: React.FC<{ showOnboarding: boolean; onboardingStep: number; onNextStep: () => void; onSkip: () => void; onboardingRef?: React.RefObject<HTMLDivElement | null> }> = ({ showOnboarding, onboardingStep, onNextStep, onSkip, onboardingRef }) => (
+  <div className="max-w-lg mx-auto text-center py-12" ref={onboardingRef}>
     <div className="relative inline-block mb-6">
       <div className="w-16 h-16 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-center">
         <Server className="w-8 h-8 text-slate-600" />
@@ -253,15 +253,26 @@ const App: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const retryRef = useRef(0);
+  const onboardingRef = useRef<HTMLDivElement>(null);
+
+  // Dev mode bypass
+  const isDev = import.meta.env.DEV;
+  const effectiveAuth = isDev || isAuthenticated;
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) navigate("/login");
-  }, [authLoading, isAuthenticated, navigate]);
+    if (!authLoading && !effectiveAuth) {
+      navigate("/login", { replace: true });
+    }
+  }, [authLoading, effectiveAuth, navigate]);
 
   useEffect(() => {
     // Show onboarding for new users (no devices, first visit)
     if (hasDevices === false && !localStorage.getItem("cardea_onboarding_done")) {
       setShowOnboarding(true);
+      // Auto-scroll to onboarding content
+      setTimeout(() => {
+        onboardingRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
     }
   }, [hasDevices]);
 
@@ -276,36 +287,42 @@ const App: React.FC = () => {
   };
 
   const fetchData = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!effectiveAuth) return;
     const token = localStorage.getItem("token");
 
     try {
-      const devRes = await axios.get<Device[]>(`${ORACLE_URL}/api/devices/list`, { headers: { Authorization: `Bearer ${token}` } });
+      const devRes = await axios.get<Device[]>(`${ORACLE_URL}/api/devices/list`, { 
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        timeout: 5000
+      });
       const count = Array.isArray(devRes.data) ? devRes.data.length : 0;
       setHasDevices(count > 0);
-    } catch { /* ignore */ }
+    } catch {
+      // In dev mode without backend, default to no devices
+      if (isDev) setHasDevices(false);
+    }
 
     try {
-      const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics?time_range=today`, { timeout: 30000 });
+      const res = await axios.get<AnalyticsResponse>(`${ORACLE_URL}/api/analytics?time_range=today`, { timeout: 5000 });
       setData(res.data);
       setIsConnected(true);
       retryRef.current = 0;
     } catch {
       setIsConnected(false);
       retryRef.current++;
-      if (retryRef.current >= 3) setToast({ message: "Connection to Oracle lost", type: "error" });
+      if (retryRef.current >= 3 && !isDev) setToast({ message: "Connection to Oracle lost", type: "error" });
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [effectiveAuth, isDev]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (effectiveAuth) {
       fetchData();
       const interval = setInterval(fetchData, 5000);
       return () => clearInterval(interval);
     }
-  }, [fetchData, isAuthenticated]);
+  }, [fetchData, effectiveAuth]);
 
   useEffect(() => { document.title = "Cardea | Dashboard"; }, []);
 
@@ -317,7 +334,7 @@ const App: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!effectiveAuth) return null;
 
   const critical = data?.alerts_by_severity?.critical || 0;
   const high = data?.alerts_by_severity?.high || 0;
@@ -360,7 +377,7 @@ const App: React.FC = () => {
         {hasDevices === false && !isLoading ? (
           <>
             <AIInsightCard insight={null} isLoading={false} isOffline={true} />
-            <NoDevicesState showOnboarding={showOnboarding} onboardingStep={onboardingStep} onNextStep={nextOnboardingStep} onSkip={skipOnboarding} />
+            <NoDevicesState showOnboarding={showOnboarding} onboardingStep={onboardingStep} onNextStep={nextOnboardingStep} onSkip={skipOnboarding} onboardingRef={onboardingRef} />
           </>
         ) : hasDevices === true ? (
           <>
@@ -395,7 +412,7 @@ const App: React.FC = () => {
 
       {/* Onboarding overlay for other steps */}
       {showOnboarding && onboardingStep === 2 && hasDevices === false && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm text-center animate-in zoom-in-95">
             <div className="w-12 h-12 bg-cyan-500/10 rounded-xl flex items-center justify-center mx-auto mb-4"><Sparkles className="w-6 h-6 text-cyan-400" /></div>
             <h3 className="text-lg font-semibold text-white mb-2">AI-Powered Protection</h3>
@@ -405,7 +422,7 @@ const App: React.FC = () => {
         </div>
       )}
       {showOnboarding && onboardingStep === 3 && hasDevices === false && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 max-w-sm text-center animate-in zoom-in-95">
             <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="w-6 h-6 text-green-400" /></div>
             <h3 className="text-lg font-semibold text-white mb-2">You're All Set!</h3>
