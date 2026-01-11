@@ -271,20 +271,20 @@
             <div class="flex items-center gap-4">
                 <!-- Connected Devices Badge -->
                 <div class="flex items-center gap-2 px-3 py-2 bg-slate-900/60 border border-slate-800 rounded-lg">
-                    <i data-lucide="radio-tower" class="w-4 h-4 text-cyan-400"></i>
+                    <i data-lucide="cloud" class="w-4 h-4 text-cyan-400"></i>
                     <span class="text-sm text-slate-300">
-                        <span class="font-semibold text-white">{{ setup_status.connected_devices | default(1) }}</span> device
+                        <span class="text-green-400">Connected to Oracle</span>
                     </span>
                 </div>
-                <!-- Reset Button -->
+                <!-- Connect Another Account Button -->
                 {% if setup_status.configured %}
                 <button 
                     onclick="resetDevice()" 
-                    class="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-orange-500/20 border border-slate-700 hover:border-orange-500/50 rounded-lg text-slate-400 hover:text-orange-400 transition-all text-sm"
-                    title="Unregister device"
+                    class="flex items-center gap-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 rounded-lg text-white transition-all text-sm"
+                    title="Connect to a different Oracle account"
                 >
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    <span class="hidden md:inline">Reset</span>
+                    <i data-lucide="link" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Connect Another</span>
                 </button>
                 {% endif %}
                 <!-- Time -->
@@ -459,9 +459,9 @@
             }
         }
 
-        // Reset device function
+        // Reset device function - allows connecting to a different Oracle account
         async function resetDevice() {
-            if (!confirm("Are you sure you want to unregister this device? It will return to setup mode and you'll need to pair it again.")) {
+            if (!confirm("Disconnect from current Oracle account?\n\nThis will generate a new pairing code so you can connect to a different account.")) {
                 return;
             }
             
@@ -474,14 +474,14 @@
                 const data = await res.json();
                 
                 if (res.ok) {
-                    alert("Device unregistered successfully! The page will reload to show the setup screen.");
+                    alert("Disconnected! A new pairing code will be generated.");
                     window.location.reload();
                 } else {
-                    alert("Failed to reset: " + (data.detail || "Unknown error"));
+                    alert("Failed: " + (data.detail || "Unknown error"));
                 }
             } catch (err) {
                 console.error("Reset error:", err);
-                alert("Failed to reset device. Check console for details.");
+                alert("Failed to disconnect. Check console for details.");
             }
         }
 

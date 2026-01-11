@@ -36,7 +36,8 @@ from oracle_client import OracleClient
 # Import Zeek Notice Monitor
 from zeek_notice_monitor import get_notice_monitor
 
-ORACLE_URL = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000") # Base URL
+# Cloud Oracle URL - Azure Container Apps
+ORACLE_URL = os.getenv("ORACLE_URL", "https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io")
 DATA_DIR = Path("/app/data")
 CONFIG_FILE = DATA_DIR / "sentry_config.json"
 
@@ -175,7 +176,7 @@ class HealthResponse(BaseModel):
 
 async def escalate_to_oracle(alert_data: dict[str, Any]):
     """Pushes local anomaly evidence to the Azure-powered Oracle Cloud"""
-    oracle_url = os.getenv("ORACLE_WEBHOOK_URL", "http://localhost:8000/api/alerts")
+    oracle_url = f"{ORACLE_URL}/api/alerts"
     
     # Normalize alert_type to match Oracle's AlertType enum
     event_type = alert_data.get("event_type", "unknown")
@@ -340,23 +341,38 @@ class BridgeService:
         return {}
     
     async def register_with_oracle(self):
-        """Poll Oracle to register device and keep Claim Token fresh"""
-        if not self.is_setup_mode: return
+        """Register with Oracle cloud to get pairing code"""
+        if not self.is_setup_mode:
+            return
 
         try:
-            # Register using the method added to OracleClient
+            logger.info(f"📡 Registering with Oracle: {ORACLE_URL}")
             response = await self.oracle_client.register_device(self.hardware_id)
-            if response.get("status") in ("created", "registered"):
+            
+            if response.get("claim_token"):
                 self.claim_token = response.get("claim_token")
-                logger.info(f"🔑 Claim Token: {self.claim_token}")
+                logger.info(f"🔑 Pairing Code: {self.claim_token}")
+            elif response.get("status") == "online":
+                # Device already claimed but we lost config - need re-pairing
+                logger.warning("⚠️ Device registered but no local API key - needs re-pairing")
+            else:
+                logger.info(f"📋 Registration response: {response}")
         except Exception as e:
-            logger.error(f"Registration poll failed: {e}")
+            logger.error(f"❌ Oracle registration failed: {e}")
+            # Generate local fallback code if Oracle unreachable
+            if not self.claim_token:
+                self.claim_token = f"LOCAL-{self.hardware_id[-6:].upper()}"
+                logger.warning(f"⚠️ Using local fallback code: {self.claim_token}")
 
     async def _poll_registration_status(self):
-        """Background loop for Setup Mode"""
+        """Background loop to register with Oracle and refresh status"""
+        # Initial registration
+        await self.register_with_oracle()
+        
+        # Keep polling while in setup mode
         while self.is_setup_mode:
+            await asyncio.sleep(30)  # Poll every 30s
             await self.register_with_oracle()
-            await asyncio.sleep(10)
 
     async def save_configuration(self, api_key: str):
         """Complete setup by saving the API Key and registering with Oracle"""

@@ -98,13 +98,9 @@ services:
     command: uvicorn src.bridge_service:app --host 0.0.0.0 --port 8001 --reload --reload-dir src/templates
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      # IMPORTANT: Set this to your Azure Container Apps Oracle URL
-      # Example: https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io
-      - ORACLE_WEBHOOK_URL=${ORACLE_WEBHOOK_URL:-http://localhost:8000}
+      # Cloud Oracle URL - Azure Container Apps
+      - ORACLE_URL=${ORACLE_URL:-https://cardea-oracle.greenbeach-350af183.eastasia.azurecontainerapps.io}
       - ORACLE_API_KEY=${ORACLE_API_KEY:-}
-      # Demo mode enables hardcoded pairing code (SN7-K2M)
-      - DEMO_MODE=${DEMO_MODE:-true}
-      # Remove default SENTRY_ID to enable Setup Mode
       - SENTRY_ID=${SENTRY_ID:-}
       - ALERT_THRESHOLD=${ALERT_THRESHOLD:-0.95}
       - DEV_MODE=${DEV_MODE:-true}
