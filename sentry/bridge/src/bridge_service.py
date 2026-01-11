@@ -391,6 +391,28 @@ class BridgeService:
             self.claim_token = None
             self.connected_devices_count = 1
             
+            # Save account entry with unique nickname
+            accounts_file = DATA_DIR / "connected_accounts.json"
+            accounts = []
+            if accounts_file.exists():
+                try:
+                    accounts = json.loads(accounts_file.read_text())
+                except:
+                    pass
+            
+            existing_nicknames = [a.get("nickname", "") for a in accounts]
+            nickname = generate_nickname(existing_nicknames)
+            account_number = f"ORC-{self.hardware_id[:4].upper()}-{len(accounts)+1:03d}"
+            
+            accounts.append({
+                "id": str(len(accounts) + 1),
+                "nickname": nickname,
+                "account_number": account_number,
+                "api_key_prefix": api_key[:10] + "...",
+                "connected_at": datetime.now(timezone.utc).isoformat()
+            })
+            accounts_file.write_text(json.dumps(accounts, indent=2))
+            
             logger.info(f"💾 API key saved locally")
             
             # Register with Oracle using heartbeat
@@ -412,10 +434,20 @@ class BridgeService:
     def get_setup_status(self) -> dict[str, Any]:
         """Return status for the Local UI"""
         if not self.is_setup_mode:
+            # Count connected accounts
+            accounts_file = DATA_DIR / "connected_accounts.json"
+            account_count = 1  # Default
+            if accounts_file.exists():
+                try:
+                    accounts = json.loads(accounts_file.read_text())
+                    account_count = len(accounts)
+                except:
+                    pass
+            
             return {
                 "configured": True, 
                 "sentry_id": self.sentry_id,
-                "connected_devices": self.connected_devices_count
+                "connected_accounts": account_count
             }
         
         return {
@@ -563,12 +595,10 @@ app.add_middleware(
 )
 
 @app.get("/", response_class=HTMLResponse)
-async def tactical_dashboard(request: Request):
+async def sentry_portal(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request, 
-        "setup_status": bridge_service.get_setup_status(), 
-        "stats": bridge_service.local_stats,
-        "recent_alerts": bridge_service.alerts[-5:]
+        "setup_status": bridge_service.get_setup_status()
     })
 
 @app.get("/health", response_model=HealthResponse)
@@ -776,22 +806,20 @@ async def get_zeek_notice_stats():
 
 @app.get("/api/setup/status")
 async def get_setup_status():
-    """
-    Returns the current setup status.
-    Used by the UI to determine if setup overlay should be shown.
-    """
+    """Returns the current setup status."""
     return bridge_service.get_setup_status()
 
 @app.post("/api/setup/reset")
 async def reset_setup():
-    """
-    Resets the sentry to setup mode.
-    Deletes the config file and clears API key, allowing re-pairing.
-    """
+    """Resets sentry to setup mode, clearing all connections."""
     try:
         if bridge_service.config_path.exists():
             bridge_service.config_path.unlink()
-            logger.info("🗑️ Deleted config file")
+        
+        # Clear accounts file
+        accounts_file = DATA_DIR / "connected_accounts.json"
+        if accounts_file.exists():
+            accounts_file.unlink()
         
         bridge_service.sentry_id = bridge_service.hardware_id
         bridge_service.api_key = None
@@ -801,7 +829,7 @@ async def reset_setup():
         
         bridge_service.oracle_client.update_api_key(None)
         
-        logger.info("🔄 Sentry reset to setup mode - ready for re-pairing")
+        logger.info("🔄 Sentry reset to setup mode")
         return {
             "status": "reset", 
             "message": "Device unregistered successfully. Ready for new pairing.",
@@ -843,6 +871,134 @@ async def complete_setup(data: dict):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Setup failed: {str(e)}")
+
+# --- ACCOUNTS MANAGEMENT ---
+
+ACCOUNTS_FILE = DATA_DIR / "connected_accounts.json"
+
+NICKNAME_ADJECTIVES = ["Swift", "Bright", "Silent", "Cosmic", "Noble", "Mystic", "Rapid", "Golden", "Shadow", "Crystal", "Thunder", "Velvet", "Arctic", "Solar", "Lunar"]
+NICKNAME_NOUNS = ["Phoenix", "Falcon", "Panther", "Dragon", "Wolf", "Hawk", "Tiger", "Eagle", "Raven", "Viper", "Lynx", "Cobra", "Jaguar", "Orca", "Fox"]
+
+def generate_nickname(existing_nicknames: list[str]) -> str:
+    """Generate unique two-word nickname"""
+    import random
+    for _ in range(100):
+        name = f"{random.choice(NICKNAME_ADJECTIVES)} {random.choice(NICKNAME_NOUNS)}"
+        if name not in existing_nicknames:
+            return name
+    return f"Account {random.randint(1000, 9999)}"
+
+def load_accounts() -> list:
+    """Load connected accounts from file"""
+    if ACCOUNTS_FILE.exists():
+        try:
+            return json.loads(ACCOUNTS_FILE.read_text())
+        except:
+            pass
+    if bridge_service.api_key:
+        return [{"id": "1", "nickname": "Swift Phoenix", "account_number": "ORCxxxx", "connected_at": datetime.now().isoformat()}]
+    return []
+
+def save_accounts(accounts: list):
+    """Save accounts to file"""
+    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ACCOUNTS_FILE.write_text(json.dumps(accounts, indent=2))
+
+@app.get("/api/accounts")
+async def get_accounts():
+    """Get list of connected Oracle accounts"""
+    return load_accounts()
+
+@app.patch("/api/accounts/{account_id}")
+async def update_account(account_id: str, request: Request):
+    """Update account nickname"""
+    data = await request.json()
+    accounts = load_accounts()
+    for acc in accounts:
+        if acc.get("id") == account_id:
+            if "nickname" in data:
+                acc["nickname"] = data["nickname"][:30]
+            break
+    save_accounts(accounts)
+    return {"status": "updated"}
+
+@app.delete("/api/accounts/{account_id}")
+async def remove_account(account_id: str):
+    """Remove an Oracle account connection"""
+    accounts = load_accounts()
+    accounts = [a for a in accounts if a.get("id") != account_id]
+    save_accounts(accounts)
+    
+    if len(accounts) == 0:
+        await reset_setup()
+    
+    return {"status": "removed"}
+
+@app.post("/api/setup/add-account")
+async def add_account():
+    """Generate new pairing code for additional account"""
+    await bridge_service.register_with_oracle()
+    return {
+        "claim_token": bridge_service.claim_token or "Registering...",
+        "message": "Enter this code in your Oracle dashboard"
+    }
+
+# --- DEVICE INFO ---
+
+@app.get("/api/device-info")
+async def get_device_info():
+    """Get device hardware stats"""
+    info = {
+        "hardware_id": bridge_service.hardware_id,
+        "version": "1.0.0",
+        "cpu_temp": None,
+        "memory_percent": None,
+        "disk_percent": None,
+        "uptime": None
+    }
+    
+    try:
+        # CPU Temperature (Raspberry Pi / Linux)
+        temp_file = Path("/sys/class/thermal/thermal_zone0/temp")
+        if temp_file.exists():
+            temp = int(temp_file.read_text().strip()) / 1000
+            info["cpu_temp"] = round(temp, 1)
+    except:
+        pass
+    
+    try:
+        # Memory usage
+        with open("/proc/meminfo") as f:
+            lines = f.readlines()
+            total = int([l for l in lines if "MemTotal" in l][0].split()[1])
+            avail = int([l for l in lines if "MemAvailable" in l][0].split()[1])
+            info["memory_percent"] = round((1 - avail/total) * 100, 1)
+    except:
+        pass
+    
+    try:
+        # Disk usage
+        import shutil
+        usage = shutil.disk_usage("/")
+        info["disk_percent"] = round(usage.used / usage.total * 100, 1)
+    except:
+        pass
+    
+    try:
+        # Uptime
+        with open("/proc/uptime") as f:
+            uptime_seconds = float(f.read().split()[0])
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            if days > 0:
+                info["uptime"] = f"{days}d {hours}h"
+            else:
+                mins = int((uptime_seconds % 3600) // 60)
+                info["uptime"] = f"{hours}h {mins}m"
+    except:
+        pass
+    
+    return info
 
 if __name__ == "__main__":
     port = int(os.getenv("BRIDGE_PORT", "8001"))
