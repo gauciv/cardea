@@ -120,11 +120,9 @@ async def claim_device(req: DeviceClaimRequest, authorization: Optional[str] = H
     # Extract user_id from token (simplified - in production use proper JWT validation)
     user_id = None
     if authorization and authorization.startswith("Bearer "):
-        # For now, we'll extract user from the token or use a default
-        # In production, decode JWT and get user_id
-        token = authorization.replace("Bearer ", "")
-        if token:
-            user_id = 1  # Simplified: assign to user 1 for now
+        # For now, user_id stays None until proper JWT auth is implemented
+        # The user_id column is nullable, so devices can be claimed without a user
+        pass
     
     conn = None
     try:
