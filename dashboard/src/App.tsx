@@ -4,7 +4,7 @@ import { RefreshCw, Eye, BarChart3 } from "lucide-react";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, ThreatMap } from "./components/dashboard";
+import { AIPersona, SimpleStats, ThreatMap, DetailedLogs } from "./components/dashboard";
 import { useDashboardData } from "./hooks/useDashboardData";
 
 const App: React.FC = () => {
@@ -97,9 +97,12 @@ const App: React.FC = () => {
               deviceName={primaryDevice?.name}
             />
             
-            {/* Detailed Mode: Just Threat Map */}
+            {/* Detailed Mode: Threat Map + Logs */}
             {viewMode === "detailed" && (
-              <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
+              <div className="space-y-6">
+                <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
+                <DetailedLogs alerts={data?.alerts || []} isLoading={isLoading && !data} />
+              </div>
             )}
           </>
         ) : (
