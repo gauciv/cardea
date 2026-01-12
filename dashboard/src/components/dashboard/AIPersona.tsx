@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Wifi, WifiOff } from 'lucide-react';
 import type { AIInsight } from '../../types';
 
@@ -78,10 +78,12 @@ const DiscoBall: React.FC<{ status: 'idle' | 'thinking' | 'speaking'; color: str
   );
 };
 
-// Typing animation hook
+// Typing animation hook - only animates when text actually changes
 const useTypingEffect = (text: string, speed: number = 30, enabled: boolean = true) => {
   const [displayedText, setDisplayedText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const prevTextRef = useRef<string>('');
+  const hasAnimatedRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!enabled || !text) {
@@ -89,6 +91,14 @@ const useTypingEffect = (text: string, speed: number = 30, enabled: boolean = tr
       return;
     }
 
+    // Skip animation if text hasn't changed
+    if (text === prevTextRef.current && hasAnimatedRef.current) {
+      setDisplayedText(text);
+      return;
+    }
+
+    prevTextRef.current = text;
+    hasAnimatedRef.current = true;
     setIsTyping(true);
     setDisplayedText('');
     let i = 0;
