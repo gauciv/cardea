@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bell, Shield, Moon, Sun, Volume2, VolumeX, Mail, Smartphone, Clock, Save, Check } from 'lucide-react';
+import { Layout } from './Layout';
 import { PageHeader } from './PageHeader';
 import { useAuth } from '../lib/useAuth';
 
@@ -82,26 +83,23 @@ export const SettingsPage = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <PageHeader />
-
-      <main className="max-w-3xl mx-auto px-6 py-8">
-        {/* Page Title */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-lg font-semibold">Settings</h1>
-            <p className="text-xs text-slate-500">Customize your Cardea experience</p>
-          </div>
+    <Layout>
+      <PageHeader 
+        title="Settings"
+        subtitle="Customize your experience"
+        actions={
           <button
             onClick={handleSave}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               saved ? 'bg-green-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
             }`}
           >
-            {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save</>}
+            {saved ? <><Check className="w-3.5 h-3.5" /> Saved</> : <><Save className="w-3.5 h-3.5" /> Save</>}
           </button>
-        </div>
+        }
+      />
 
+      <main className="max-w-3xl mx-auto px-6 py-8">
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-slate-900 rounded-lg mb-8">
           {[
@@ -331,6 +329,6 @@ export const SettingsPage = () => {
           </div>
         )}
       </main>
-    </div>
+    </Layout>
   );
 };

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { User, Mail, Shield, Calendar, Activity, Server, AlertTriangle, CheckCircle, Clock, Edit2, Camera } from 'lucide-react';
+import { Layout } from './Layout';
 import { PageHeader } from './PageHeader';
 import { useAuth } from '../lib/useAuth';
 import { getDisplayName } from '../lib/auth';
@@ -39,8 +40,8 @@ export const ProfilePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <PageHeader />
+    <Layout>
+      <PageHeader title="Profile" subtitle="Manage your account" />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Profile Card */}
@@ -188,6 +189,6 @@ export const ProfilePage = () => {
           </div>
         </div>
       </main>
-    </div>
+    </Layout>
   );
 };

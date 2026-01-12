@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
+import { Layout } from "./components/Layout";
 import { PageHeader } from "./components/PageHeader";
 import { Toast } from "./components/common";
 import { AIPersona, SimpleStats, ThreatMap, DetailedLogs, DeviceSetup } from "./components/dashboard";
@@ -41,34 +42,30 @@ const App: React.FC = () => {
 
   if (!effectiveAuth) return null;
 
-  // Compute risk level - override to 'low' if threat was resolved
   const riskScore = data?.risk_score || 0;
   const insightRiskLevel = data?.ai_insight?.risk_level;
   const riskLevel: 'low' | 'medium' | 'high' = threatResolved ? 'low' : (insightRiskLevel || (riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low'));
   
-  // Use actual device status from devices list, not Oracle connection status
   const onlineDevices = devices.filter(d => d.status === 'online');
   const deviceStatus: 'online' | 'offline' = onlineDevices.length > 0 ? 'online' : 'offline';
   const primaryDevice = onlineDevices[0] || devices[0];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <Layout>
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
-      {/* Header */}
       <PageHeader 
+        title="Dashboard"
         showViewToggle={hasDevices === true}
         viewMode={viewMode}
         onViewModeChange={() => setViewMode(v => v === "simple" ? "detailed" : "simple")}
       />
 
-      {/* Main */}
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {hasDevices === false && !isLoading ? (
           <DeviceSetup />
         ) : hasDevices === true ? (
           <>
-            {/* AI Persona - Shows everything: message, actions, execution */}
             <AIPersona 
               insight={data?.ai_insight} 
               isLoading={isLoading && !data} 
@@ -78,14 +75,12 @@ const App: React.FC = () => {
               onResolvedChange={setThreatResolved}
             />
             
-            {/* Status cards */}
             <SimpleStats 
               deviceStatus={deviceStatus} 
               riskLevel={riskLevel}
               deviceName={primaryDevice?.name}
             />
             
-            {/* Detailed Mode: Threat Map + Logs */}
             {viewMode === "detailed" && (
               <div className="space-y-6">
                 <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
@@ -99,7 +94,7 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
-    </div>
+    </Layout>
   );
 };
 

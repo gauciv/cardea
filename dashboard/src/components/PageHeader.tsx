@@ -1,32 +1,29 @@
-import { useNavigate } from 'react-router-dom';
 import { Eye, BarChart3 } from 'lucide-react';
-import { NavBar } from './NavBar';
-import { useAuth } from '../lib/useAuth';
 
 interface PageHeaderProps {
+  title?: string;
+  subtitle?: string;
   showViewToggle?: boolean;
   viewMode?: 'simple' | 'detailed';
   onViewModeChange?: () => void;
+  actions?: React.ReactNode;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ 
+  title,
+  subtitle,
   showViewToggle, 
   viewMode, 
-  onViewModeChange 
+  onViewModeChange,
+  actions
 }) => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-
   return (
-    <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-40 px-6 py-3">
-      <div className="max-w-6xl mx-auto flex justify-between items-center">
-        <button 
-          onClick={() => navigate('/dashboard')} 
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-        >
-          <img src="/cardea-logo.png" alt="Cardea" className="w-6 h-6" />
-          <span className="font-bold text-sm tracking-tight text-white">CARDEA</span>
-        </button>
+    <header className="border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-30 px-6 py-3">
+      <div className="flex justify-between items-center">
+        <div>
+          {title && <h1 className="text-lg font-semibold text-white">{title}</h1>}
+          {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+        </div>
         <div className="flex items-center gap-3">
           {showViewToggle && onViewModeChange && (
             <button 
@@ -40,7 +37,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               {viewMode === "detailed" ? <><BarChart3 className="w-3 h-3" />Detailed</> : <><Eye className="w-3 h-3" />Simple</>}
             </button>
           )}
-          <NavBar user={user} />
+          {actions}
         </div>
       </div>
     </header>
