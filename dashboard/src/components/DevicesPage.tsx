@@ -24,12 +24,11 @@ export const DevicesPage = () => {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const fetchDevices = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) { setIsLoading(false); return; }
+    const token = localStorage.getItem('cardea_auth_token');
 
     try {
       const res = await axios.get<ExtendedDevice[]>(`${ORACLE_URL}/api/devices/list`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setDevices(res.data);
     } catch (err) {
@@ -51,7 +50,7 @@ export const DevicesPage = () => {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('cardea_auth_token');
       const res = await axios.post(`${ORACLE_URL}/api/devices/claim`, {
         claim_token: claimToken,
         friendly_name: claimName || `Sentry Device`
@@ -78,9 +77,9 @@ export const DevicesPage = () => {
 
   const handleDelete = async (deviceId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('cardea_auth_token');
       await axios.delete(`${ORACLE_URL}/api/devices/${deviceId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setDeleteConfirm(null);
       await fetchDevices();

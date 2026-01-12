@@ -24,7 +24,7 @@ export function useDashboardData(isAuthenticated: boolean): UseDashboardDataRetu
   const fetchData = useCallback(async () => {
     if (!isAuthenticated && !isDev) return;
 
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("cardea_auth_token");
 
     try {
       const devRes = await axios.get<Device[]>(`${ORACLE_URL}/api/devices/list`, { 
