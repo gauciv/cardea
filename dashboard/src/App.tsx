@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const isDev = import.meta.env.DEV;
   const effectiveAuth = isDev || isAuthenticated;
 
-  const { data, isConnected, isLoading, hasDevices, error } = useDashboardData(effectiveAuth);
+  const { data, isConnected, isLoading, hasDevices, devices, error } = useDashboardData(effectiveAuth);
   const { showOnboarding, onboardingStep, nextStep, skip } = useOnboarding(hasDevices);
   
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
@@ -54,7 +54,11 @@ const App: React.FC = () => {
   // Compute risk level from data
   const riskScore = data?.risk_score || 0;
   const riskLevel: 'low' | 'medium' | 'high' = riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low';
-  const deviceStatus: 'online' | 'offline' = isConnected ? 'online' : 'offline';
+  
+  // Use actual device status from devices list, not Oracle connection status
+  const onlineDevices = devices.filter(d => d.status === 'online');
+  const deviceStatus: 'online' | 'offline' = onlineDevices.length > 0 ? 'online' : 'offline';
+  const primaryDevice = onlineDevices[0] || devices[0];
   
   const critical = data?.alerts_by_severity?.critical || 0;
   const high = data?.alerts_by_severity?.high || 0;
@@ -109,13 +113,14 @@ const App: React.FC = () => {
               <SimpleStats 
                 deviceStatus={deviceStatus} 
                 riskLevel={riskLevel}
+                deviceName={primaryDevice?.name}
               />
             )}
             
             {/* Detailed Mode: Full analytics */}
             {viewMode === "detailed" && (
               <>
-                <SimpleStats deviceStatus={deviceStatus} riskLevel={riskLevel} />
+                <SimpleStats deviceStatus={deviceStatus} riskLevel={riskLevel} deviceName={primaryDevice?.name} />
                 <ThreatOverview 
                   alerts={data?.alerts || []} 
                   severityStats={data?.alerts_by_severity || {}} 

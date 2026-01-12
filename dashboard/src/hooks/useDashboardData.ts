@@ -8,6 +8,7 @@ interface UseDashboardDataReturn {
   isConnected: boolean;
   isLoading: boolean;
   hasDevices: boolean | null;
+  devices: Device[];
   error: string | null;
   refetch: () => Promise<void>;
 }
@@ -17,6 +18,7 @@ export function useDashboardData(isAuthenticated: boolean): UseDashboardDataRetu
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [hasDevices, setHasDevices] = useState<boolean | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState<string | null>(null);
   const retryRef = useRef(0);
   const isDev = import.meta.env.DEV;
@@ -31,8 +33,9 @@ export function useDashboardData(isAuthenticated: boolean): UseDashboardDataRetu
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         timeout: 5000
       });
-      const count = Array.isArray(devRes.data) ? devRes.data.length : 0;
-      setHasDevices(count > 0);
+      const deviceList = Array.isArray(devRes.data) ? devRes.data : [];
+      setDevices(deviceList);
+      setHasDevices(deviceList.length > 0);
     } catch {
       if (isDev) setHasDevices(false);
     }
@@ -69,6 +72,7 @@ export function useDashboardData(isAuthenticated: boolean): UseDashboardDataRetu
     isConnected,
     isLoading,
     hasDevices,
+    devices,
     error,
     refetch: fetchData
   };

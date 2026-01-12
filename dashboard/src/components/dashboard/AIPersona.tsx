@@ -113,6 +113,7 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   insight, 
   isLoading, 
   isOffline,
+  deviceStatus,
   riskLevel = 'low'
 }) => {
   const message = insight?.story || insight?.headline || insight?.summary || '';
@@ -121,6 +122,7 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   const ballColor = riskLevel === 'high' ? 'red' : riskLevel === 'medium' ? 'yellow' : 'cyan';
   const ballStatus = isLoading ? 'thinking' : isTyping ? 'speaking' : 'idle';
 
+  // No devices at all - prompt to connect first device
   if (isOffline) {
     return (
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
@@ -129,6 +131,21 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
           <div className="flex-1">
             <p className="text-slate-400 text-sm">Hello! I'm your AI security assistant.</p>
             <p className="text-slate-500 text-xs mt-1">Connect a Sentry device to activate real-time monitoring.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Device exists but is offline
+  if (deviceStatus === 'offline') {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+        <div className="flex items-center gap-6">
+          <DiscoBall status="idle" color="yellow" />
+          <div className="flex-1">
+            <p className="text-yellow-400 text-sm">Your Sentry device appears to be offline.</p>
+            <p className="text-slate-500 text-xs mt-1">Check that your device is powered on and connected to the network. I'll resume monitoring once it reconnects.</p>
           </div>
         </div>
       </div>
