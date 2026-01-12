@@ -4,7 +4,7 @@ import { RefreshCw, AlertTriangle, Eye, BarChart3 } from "lucide-react";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel, ActionCenter } from "./components/dashboard";
+import { AIPersona, SimpleStats, NoDevicesState, ThreatMap } from "./components/dashboard";
 import { OnboardingOverlay } from "./components/onboarding";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useOnboarding } from "./hooks/useOnboarding";
@@ -100,52 +100,25 @@ const App: React.FC = () => {
           </>
         ) : hasDevices === true ? (
           <>
-            {/* AI Persona - Always shown */}
+            {/* AI Persona - Shows everything: message, actions, execution */}
             <AIPersona 
               insight={data?.ai_insight} 
               isLoading={isLoading && !data} 
               deviceStatus={deviceStatus}
               riskLevel={riskLevel}
+              onActionComplete={() => refetch()}
             />
             
-            {/* Simple Mode: Status cards + Action Center */}
-            {viewMode === "simple" && (
-              <>
-                <SimpleStats 
-                  deviceStatus={deviceStatus} 
-                  riskLevel={riskLevel}
-                  deviceName={primaryDevice?.name}
-                />
-                {/* Action Center - shows grouped threat with action buttons */}
-                <ActionCenter 
-                  threat={data?.ai_insight?.active_threat}
-                  decisions={data?.ai_insight?.decisions || []}
-                  onResolved={() => refetch()}
-                />
-              </>
-            )}
+            {/* Status cards */}
+            <SimpleStats 
+              deviceStatus={deviceStatus} 
+              riskLevel={riskLevel}
+              deviceName={primaryDevice?.name}
+            />
             
-            {/* Detailed Mode: Full analytics */}
+            {/* Detailed Mode: Just Threat Map */}
             {viewMode === "detailed" && (
-              <>
-                <SimpleStats deviceStatus={deviceStatus} riskLevel={riskLevel} deviceName={primaryDevice?.name} />
-                
-                {/* Action Center */}
-                <ActionCenter 
-                  threat={data?.ai_insight?.active_threat}
-                  decisions={data?.ai_insight?.decisions || []}
-                  onResolved={() => refetch()}
-                />
-                
-                {/* Threat Map */}
-                <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
-                
-                {/* Two-column layout for Timeline and Actions */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <AlertTimeline alerts={data?.alerts || []} isLoading={isLoading && !data} />
-                  <ActionableAlertsPanel alerts={data?.alerts || []} isLoading={isLoading && !data} />
-                </div>
-              </>
+              <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
             )}
           </>
         ) : (
