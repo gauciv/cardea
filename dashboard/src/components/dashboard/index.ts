@@ -3,3 +3,6 @@ export { AIPersona, SimpleStats } from './AIPersona';
 export { StatsGrid } from './StatsGrid';
 export { AlertTable } from './AlertTable';
 export { NoDevicesState } from './NoDevicesState';
+export { ThreatMap } from './ThreatMap';
+export { AlertTimeline } from './AlertTimeline';
+export { ActionableAlertsPanel } from './ActionableAlerts';
