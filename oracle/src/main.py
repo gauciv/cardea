@@ -73,8 +73,16 @@ async def lifespan(app: FastAPI):
         logger.info("✅ PostgreSQL Database initialized successfully")
     except Exception as e:
         logger.critical(f"❌ Database initialization failed: {e}")
-        # In production, if DB fails, the service is useless. Fail fast.
         sys.exit(1)
+    
+    # 2. Initialize Azure AI Search index (if configured)
+    try:
+        from api.analytics import analyzer
+        if analyzer.search_service and analyzer.search_service.index_client:
+            await analyzer.search_service.ensure_index_exists()
+            logger.info("✅ Azure AI Search index ready")
+    except Exception as e:
+        logger.warning(f"⚠️ Azure AI Search setup skipped: {e}")
         
     yield  # Application runs here
     
