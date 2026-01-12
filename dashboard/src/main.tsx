@@ -5,23 +5,28 @@ import './index.css'
 import App from './App.tsx'
 import LoginPage from './components/LoginPage.tsx'
 import LandingPage from './components/LandingPage.tsx'
-import { DevicesPage } from './components/DevicesPage.tsx' // Import the new page
+import { DevicesPage } from './components/DevicesPage.tsx'
+import { ProtectedRoute } from './components/ProtectedRoute.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* Landing Page */}
+        {/* Public Routes */}
         <Route path="/" element={<LandingPage />} />
-        
-        {/* Login Page */}
         <Route path="/login" element={<LoginPage />} />
         
-        {/* Dashboard (Main App) */}
-        <Route path="/dashboard" element={<App />} />
-
-        {/* Devices Management Page */}
-        <Route path="/devices" element={<DevicesPage />} />
+        {/* Protected Routes - Require Authentication */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <App />
+          </ProtectedRoute>
+        } />
+        <Route path="/devices" element={
+          <ProtectedRoute>
+            <DevicesPage />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
