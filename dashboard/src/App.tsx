@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, AlertTriangle, Eye, BarChart3 } from "lucide-react";
+import { RefreshCw, Eye, BarChart3 } from "lucide-react";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
@@ -20,6 +20,7 @@ const App: React.FC = () => {
   
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
+  const [threatResolved, setThreatResolved] = useState(false);
   const onboardingRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,18 +51,15 @@ const App: React.FC = () => {
 
   if (!effectiveAuth) return null;
 
-  // Compute risk level - prefer insight's risk_level, fallback to score calculation
+  // Compute risk level - override to 'low' if threat was resolved
   const riskScore = data?.risk_score || 0;
   const insightRiskLevel = data?.ai_insight?.risk_level;
-  const riskLevel: 'low' | 'medium' | 'high' = insightRiskLevel || (riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low');
+  const riskLevel: 'low' | 'medium' | 'high' = threatResolved ? 'low' : (insightRiskLevel || (riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low'));
   
   // Use actual device status from devices list, not Oracle connection status
   const onlineDevices = devices.filter(d => d.status === 'online');
   const deviceStatus: 'online' | 'offline' = onlineDevices.length > 0 ? 'online' : 'offline';
   const primaryDevice = onlineDevices[0] || devices[0];
-  
-  const critical = data?.alerts_by_severity?.critical || 0;
-  const high = data?.alerts_by_severity?.high || 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -81,11 +79,6 @@ const App: React.FC = () => {
                 {viewMode === "detailed" ? <><BarChart3 className="w-3 h-3" />Detailed</> : <><Eye className="w-3 h-3" />Simple</>}
               </button>
             )}
-            <div className="flex items-center gap-3 text-[10px] text-slate-500">
-              {hasDevices && (critical > 0 || high > 0) && (
-                <span className="text-red-500 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{critical + high}</span>
-              )}
-            </div>
             {user && <UserMenu user={user} />}
           </div>
         </div>
@@ -107,6 +100,7 @@ const App: React.FC = () => {
               deviceStatus={deviceStatus}
               riskLevel={riskLevel}
               onActionComplete={() => refetch()}
+              onResolvedChange={setThreatResolved}
             />
             
             {/* Status cards */}

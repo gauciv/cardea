@@ -12,6 +12,7 @@ interface AIPersonaProps {
   deviceStatus?: 'online' | 'offline';
   riskLevel?: 'low' | 'medium' | 'high';
   onActionComplete?: () => void;
+  onResolvedChange?: (resolved: boolean) => void;
 }
 
 // Disco Ball SVG Component
@@ -97,7 +98,8 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   isOffline,
   deviceStatus,
   riskLevel = 'low',
-  onActionComplete
+  onActionComplete,
+  onResolvedChange
 }) => {
   const [executionState, setExecutionState] = useState<ExecutionState>('idle');
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
@@ -162,6 +164,7 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
       setResolvedMessage(successMsg);
       setExecutionState('resolved');
       setSteps([]);
+      onResolvedChange?.(true);
       
       // Notify parent to refresh data
       setTimeout(() => onActionComplete?.(), 1500);
