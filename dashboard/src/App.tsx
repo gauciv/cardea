@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, AlertTriangle, Eye, BarChart3 } from "lucide-react";
-import { ThreatOverview } from "./components/ThreatOverview";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, AlertTable, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel, SentryHealth } from "./components/dashboard";
+import { AIPersona, SimpleStats, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel } from "./components/dashboard";
 import { OnboardingOverlay } from "./components/onboarding";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useOnboarding } from "./hooks/useOnboarding";
-import { SENTRY_URL } from "./config";
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -17,7 +15,7 @@ const App: React.FC = () => {
   const isDev = import.meta.env.DEV;
   const effectiveAuth = isDev || isAuthenticated;
 
-  const { data, isConnected, isLoading, hasDevices, devices, error } = useDashboardData(effectiveAuth);
+  const { data, isLoading, hasDevices, devices, error } = useDashboardData(effectiveAuth);
   const { showOnboarding, onboardingStep, nextStep, skip } = useOnboarding(hasDevices);
   
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
@@ -111,40 +109,26 @@ const App: React.FC = () => {
             
             {/* Simple Mode: Just status cards */}
             {viewMode === "simple" && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <SimpleStats 
-                    deviceStatus={deviceStatus} 
-                    riskLevel={riskLevel}
-                    deviceName={primaryDevice?.name}
-                  />
-                </div>
-                <SentryHealth sentryUrl={SENTRY_URL} isDeviceOnline={deviceStatus === 'online'} />
-              </div>
+              <SimpleStats 
+                deviceStatus={deviceStatus} 
+                riskLevel={riskLevel}
+                deviceName={primaryDevice?.name}
+              />
             )}
-            
-            {/* Threat Map - Always visible when devices exist */}
-            <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
-            
-            {/* Two-column layout for Timeline and Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Alert Timeline */}
-              <AlertTimeline alerts={data?.alerts || []} isLoading={isLoading && !data} />
-              
-              {/* Action Center */}
-              <ActionableAlertsPanel alerts={data?.alerts || []} isLoading={isLoading && !data} />
-            </div>
             
             {/* Detailed Mode: Full analytics */}
             {viewMode === "detailed" && (
               <>
                 <SimpleStats deviceStatus={deviceStatus} riskLevel={riskLevel} deviceName={primaryDevice?.name} />
-                <ThreatOverview 
-                  alerts={data?.alerts || []} 
-                  severityStats={data?.alerts_by_severity || {}} 
-                  isConnected={isConnected} 
-                />
-                <AlertTable alerts={data?.alerts || []} isConnected={isConnected} />
+                
+                {/* Threat Map */}
+                <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />
+                
+                {/* Two-column layout for Timeline and Actions */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <AlertTimeline alerts={data?.alerts || []} isLoading={isLoading && !data} />
+                  <ActionableAlertsPanel alerts={data?.alerts || []} isLoading={isLoading && !data} />
+                </div>
               </>
             )}
           </>
