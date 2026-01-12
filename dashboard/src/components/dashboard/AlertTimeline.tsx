@@ -91,23 +91,29 @@ export const AlertTimeline: React.FC<AlertTimelineProps> = ({ alerts, isLoading 
   // Empty state
   if (!isLoading && alerts.length === 0) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Clock className="w-5 h-5 text-cyan-500" />
-          <h3 className="text-sm font-medium text-white">Alert Timeline</h3>
+      <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-cyan-500" />
+            <h3 className="text-sm font-medium text-white">Alert Timeline</h3>
+          </div>
+          <span className="text-[10px] text-slate-500">Last 24 hours</span>
         </div>
         
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Shield className="w-10 h-10 text-slate-700 mb-3" />
-          <p className="text-sm text-slate-500">No alerts in this time period</p>
-          <p className="text-xs text-slate-600 mt-1">Your network is quiet</p>
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
+            <Shield className="w-6 h-6 text-green-500" />
+          </div>
+          <p className="text-sm text-slate-300 font-medium">All Quiet</p>
+          <p className="text-xs text-slate-500 mt-1">No security events to report</p>
+          <p className="text-[10px] text-slate-600 mt-3">New alerts will appear here in real-time</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+    <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5 text-cyan-500" />

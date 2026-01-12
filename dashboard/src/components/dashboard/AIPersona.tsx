@@ -125,12 +125,19 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   // No devices at all - prompt to connect first device
   if (isOffline) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-2xl p-6 shadow-lg">
         <div className="flex items-center gap-6">
           <DiscoBall status="idle" color="cyan" />
           <div className="flex-1">
-            <p className="text-slate-400 text-sm">Hello! I'm your AI security assistant.</p>
-            <p className="text-slate-500 text-xs mt-1">Connect a Sentry device to activate real-time monitoring.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">👋</span>
+              <span className="text-xs text-slate-500">Welcome to Cardea</span>
+            </div>
+            <p className="text-slate-200 text-sm font-medium">Hi there! I'm your AI security assistant.</p>
+            <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+              I'll help you monitor your network for threats and keep your business safe. 
+              Let's start by connecting your first Sentry device.
+            </p>
           </div>
         </div>
       </div>
@@ -140,12 +147,19 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   // Device exists but is offline
   if (deviceStatus === 'offline') {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <div className="bg-gradient-to-br from-yellow-950/20 to-slate-950 border border-yellow-900/30 rounded-2xl p-6 shadow-lg">
         <div className="flex items-center gap-6">
           <DiscoBall status="idle" color="yellow" />
           <div className="flex-1">
-            <p className="text-yellow-400 text-sm">Your Sentry device appears to be offline.</p>
-            <p className="text-slate-500 text-xs mt-1">Check that your device is powered on and connected to the network. I'll resume monitoring once it reconnects.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">📡</span>
+              <span className="text-xs text-yellow-500/70">Connection Issue</span>
+            </div>
+            <p className="text-yellow-300 text-sm font-medium">I've lost connection to your Sentry device.</p>
+            <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+              This could be a network issue or the device may need attention. 
+              Check that it's powered on and connected to your network. I'll automatically reconnect when it's back online.
+            </p>
           </div>
         </div>
       </div>
@@ -154,12 +168,16 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
 
   if (isLoading) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6">
+      <div className="bg-gradient-to-br from-cyan-950/20 to-slate-950 border border-cyan-900/30 rounded-2xl p-6 shadow-lg">
         <div className="flex items-center gap-6">
           <DiscoBall status="thinking" color="cyan" />
           <div className="flex-1">
-            <p className="text-slate-400 text-sm">Analyzing your network...</p>
-            <div className="flex gap-1 mt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🔍</span>
+              <span className="text-xs text-cyan-500/70">Analyzing</span>
+            </div>
+            <p className="text-slate-300 text-sm">Scanning your network for threats...</p>
+            <div className="flex gap-1.5 mt-3">
               <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
               <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />

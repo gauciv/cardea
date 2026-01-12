@@ -119,7 +119,17 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
             {/* Divider */}
             <div className="my-1 border-t border-slate-800" />
 
-            {/* NEW: My Devices Link */}
+            {/* Profile Link */}
+            <Link
+              to="/profile"
+              className="w-full px-4 py-2 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-cyan-400 transition-colors text-left"
+              onClick={() => setIsOpen(false)}
+            >
+              <Shield className="w-4 h-4" />
+              <span className="text-xs font-medium">My Profile</span>
+            </Link>
+
+            {/* My Devices Link */}
             <Link
               to="/devices"
               className="w-full px-4 py-2 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-cyan-400 transition-colors text-left"
@@ -129,16 +139,15 @@ export const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
               <span className="text-xs font-medium">My Sentry Devices</span>
             </Link>
 
-            {/* Settings (placeholder) */}
-            <button
-              className="w-full px-4 py-2 flex items-center gap-3 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-left"
+            {/* Settings */}
+            <Link
+              to="/settings"
+              className="w-full px-4 py-2 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-cyan-400 transition-colors text-left"
               onClick={() => setIsOpen(false)}
-              disabled
             >
               <Settings className="w-4 h-4" />
-              <span className="text-xs">Settings</span>
-              <span className="ml-auto text-[10px] text-slate-600">Coming soon</span>
-            </button>
+              <span className="text-xs font-medium">Settings</span>
+            </Link>
 
             {/* Logout */}
             <button

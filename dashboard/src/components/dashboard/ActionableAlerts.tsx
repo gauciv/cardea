@@ -197,23 +197,32 @@ export const ActionableAlertsPanel: React.FC<ActionableAlertsPanelProps> = ({ al
   // Empty state
   if (!isLoading && actionableAlerts.length === 0) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Shield className="w-5 h-5 text-cyan-500" />
-          <h3 className="text-sm font-medium text-white">Action Center</h3>
+      <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-cyan-500" />
+            <h3 className="text-sm font-medium text-white">Action Center</h3>
+          </div>
+          <span className="text-[10px] text-green-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            No Action Needed
+          </span>
         </div>
         
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <CheckCircle className="w-10 h-10 text-green-500/50 mb-3" />
-          <p className="text-sm text-slate-400">No critical alerts requiring action</p>
-          <p className="text-xs text-slate-600 mt-1">High-priority threats will appear here</p>
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+          <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
+            <CheckCircle className="w-6 h-6 text-green-500" />
+          </div>
+          <p className="text-sm text-slate-300 font-medium">All Clear</p>
+          <p className="text-xs text-slate-500 mt-1">No critical threats requiring your attention</p>
+          <p className="text-[10px] text-slate-600 mt-3">High-priority alerts will appear here for quick action</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+    <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-cyan-500" />

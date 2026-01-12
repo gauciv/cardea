@@ -1,5 +1,6 @@
 // API and App Configuration
 export const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
+export const SENTRY_URL = import.meta.env.VITE_SENTRY_URL || "http://localhost:8001";
 
 // Severity styling configuration
 export const severityConfig = {

@@ -5,10 +5,11 @@ import { ThreatOverview } from "./components/ThreatOverview";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, AlertTable, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel } from "./components/dashboard";
+import { AIPersona, SimpleStats, AlertTable, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel, SentryHealth } from "./components/dashboard";
 import { OnboardingOverlay } from "./components/onboarding";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useOnboarding } from "./hooks/useOnboarding";
+import { SENTRY_URL } from "./config";
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -110,11 +111,16 @@ const App: React.FC = () => {
             
             {/* Simple Mode: Just status cards */}
             {viewMode === "simple" && (
-              <SimpleStats 
-                deviceStatus={deviceStatus} 
-                riskLevel={riskLevel}
-                deviceName={primaryDevice?.name}
-              />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <SimpleStats 
+                    deviceStatus={deviceStatus} 
+                    riskLevel={riskLevel}
+                    deviceName={primaryDevice?.name}
+                  />
+                </div>
+                <SentryHealth sentryUrl={SENTRY_URL} isDeviceOnline={deviceStatus === 'online'} />
+              </div>
             )}
             
             {/* Threat Map - Always visible when devices exist */}

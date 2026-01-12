@@ -185,13 +185,19 @@ export const ThreatMap: React.FC<ThreatMapProps> = ({ alerts, isLoading }) => {
   // Empty state
   if (!isLoading && threats.length === 0) {
     return (
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Globe className="w-5 h-5 text-cyan-500" />
-          <h3 className="text-sm font-medium text-white">Threat Map</h3>
+      <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Globe className="w-5 h-5 text-cyan-500" />
+            <h3 className="text-sm font-medium text-white">Global Threat Map</h3>
+          </div>
+          <span className="text-[10px] text-green-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            All Clear
+          </span>
         </div>
         
-        <div className="relative aspect-[2/1] bg-slate-950 rounded-lg overflow-hidden">
+        <div className="relative aspect-[2/1] bg-slate-950/50 rounded-lg overflow-hidden border border-slate-800/50">
           <WorldMapSVG />
           
           {/* Home marker */}
@@ -203,11 +209,13 @@ export const ThreatMap: React.FC<ThreatMapProps> = ({ alerts, isLoading }) => {
           </div>
           
           {/* Empty state overlay */}
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/40 backdrop-blur-[1px]">
             <div className="text-center">
-              <Shield className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-              <p className="text-xs text-slate-500">No external threats detected</p>
-              <p className="text-[10px] text-slate-600 mt-1">Monitoring for suspicious connections...</p>
+              <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                <Shield className="w-6 h-6 text-green-500" />
+              </div>
+              <p className="text-sm text-slate-300 font-medium">No External Threats</p>
+              <p className="text-xs text-slate-500 mt-1">Your network perimeter is secure</p>
             </div>
           </div>
         </div>
@@ -216,11 +224,11 @@ export const ThreatMap: React.FC<ThreatMapProps> = ({ alerts, isLoading }) => {
   }
 
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+    <div className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-slate-800 rounded-xl p-6 shadow-lg">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Globe className="w-5 h-5 text-cyan-500" />
-          <h3 className="text-sm font-medium text-white">Threat Map</h3>
+          <h3 className="text-sm font-medium text-white">Global Threat Map</h3>
         </div>
         <span className="text-[10px] text-slate-500">
           {threats.length} external {threats.length === 1 ? 'source' : 'sources'}
