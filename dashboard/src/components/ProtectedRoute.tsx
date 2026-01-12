@@ -3,6 +3,7 @@ import { useAuth } from '../lib/useAuth';
 
 export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
+  const isDev = import.meta.env.DEV;
 
   if (isLoading) {
     return (
@@ -12,7 +13,8 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ childr
     );
   }
 
-  if (!isAuthenticated) {
+  // Bypass auth in dev mode
+  if (!isDev && !isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
