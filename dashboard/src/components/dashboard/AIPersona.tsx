@@ -129,11 +129,57 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   deviceStatus,
   riskLevel = 'low'
 }) => {
+  // ALL HOOKS MUST BE AT THE TOP - before any conditional returns
   const message = insight?.story || insight?.headline || insight?.summary || '';
   const { displayedText, isTyping } = useTypingEffect(message, 20, !isLoading && !!insight);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
   
   const ballColor = riskLevel === 'high' ? 'red' : riskLevel === 'medium' ? 'yellow' : 'cyan';
   const ballStatus = isLoading ? 'thinking' : isTyping ? 'speaking' : 'idle';
+
+  const handleAction = async (decision: ActionButton) => {
+    setActionLoading(decision.id);
+    setActionResult(null);
+    
+    try {
+      const response = await axios.post(`${ORACLE_URL}/api/actions/execute`, {
+        action_type: decision.action_type,
+        target: decision.target,
+        reason: 'User decision from dashboard'
+      });
+      
+      setActionResult({
+        success: response.data.success,
+        message: response.data.message
+      });
+    } catch {
+      setActionResult({
+        success: false,
+        message: 'Could not complete action. Please try again.'
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getButtonStyle = (severity: string) => {
+    switch (severity) {
+      case 'danger': return 'bg-red-600 hover:bg-red-500 text-white';
+      case 'warning': return 'bg-yellow-600 hover:bg-yellow-500 text-white';
+      case 'success': return 'bg-green-600 hover:bg-green-500 text-white';
+      default: return 'bg-slate-600 hover:bg-slate-500 text-white';
+    }
+  };
+
+  const getButtonIcon = (actionType: string) => {
+    switch (actionType) {
+      case 'block_ip': return <XCircle className="w-4 h-4" />;
+      case 'dismiss': return <CheckCircle className="w-4 h-4" />;
+      case 'monitor': return <Eye className="w-4 h-4" />;
+      default: return <Shield className="w-4 h-4" />;
+    }
+  };
 
   // No devices at all - prompt to connect first device
   if (isOffline) {
@@ -204,52 +250,6 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   const emoji = insight?.status_emoji || '🟢';
   const borderColor = riskLevel === 'high' ? 'border-red-900/50' : riskLevel === 'medium' ? 'border-yellow-900/50' : 'border-cyan-900/50';
   const bgGradient = riskLevel === 'high' ? 'from-red-950/30' : riskLevel === 'medium' ? 'from-yellow-950/20' : 'from-cyan-950/20';
-  
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const handleAction = async (decision: ActionButton) => {
-    setActionLoading(decision.id);
-    setActionResult(null);
-    
-    try {
-      const response = await axios.post(`${ORACLE_URL}/api/actions/execute`, {
-        action_type: decision.action_type,
-        target: decision.target,
-        reason: 'User decision from dashboard'
-      });
-      
-      setActionResult({
-        success: response.data.success,
-        message: response.data.message
-      });
-    } catch (error) {
-      setActionResult({
-        success: false,
-        message: 'Could not complete action. Please try again.'
-      });
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const getButtonStyle = (severity: string) => {
-    switch (severity) {
-      case 'danger': return 'bg-red-600 hover:bg-red-500 text-white';
-      case 'warning': return 'bg-yellow-600 hover:bg-yellow-500 text-white';
-      case 'success': return 'bg-green-600 hover:bg-green-500 text-white';
-      default: return 'bg-slate-600 hover:bg-slate-500 text-white';
-    }
-  };
-
-  const getButtonIcon = (actionType: string) => {
-    switch (actionType) {
-      case 'block_ip': return <XCircle className="w-4 h-4" />;
-      case 'dismiss': return <CheckCircle className="w-4 h-4" />;
-      case 'monitor': return <Eye className="w-4 h-4" />;
-      default: return <Shield className="w-4 h-4" />;
-    }
-  };
 
   return (
     <div className={`bg-gradient-to-br ${bgGradient} to-slate-900/80 border ${borderColor} rounded-2xl p-6`}>
