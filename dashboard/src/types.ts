@@ -25,6 +25,7 @@ export interface AIInsight {
   status_emoji: string;
   headline: string;
   story: string;
+  question?: string;  // Question for user when decision needed
   actions_taken: string[];
   decisions: ActionButton[];
   technical_summary?: string;

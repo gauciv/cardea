@@ -934,35 +934,67 @@ Use clear, direct language suitable for a small business owner without cybersecu
         # Only call AI for escalated issues to conserve credits
         if escalated_count > 0 and self.ai_client:
             try:
+                # Get source IPs from alerts for actionable decisions
+                source_ips = list(set(
+                    a.raw_data.get("src_ip") or a.raw_data.get("source_ip") 
+                    for a in alerts[:5] 
+                    if a.raw_data and (a.raw_data.get("src_ip") or a.raw_data.get("source_ip"))
+                ))[:3]
+                
                 context = {
                     "total_alerts": len(alerts),
                     "critical_alerts": critical_count,
                     "high_alerts": high_count,
                     "risk_score": round(risk_score, 2),
                     "threat_count": len(threats),
+                    "source_ips": source_ips,
                     "recent_alerts": [
                         {"type": a.alert_type, "severity": a.severity, "title": a.title, "source": a.source}
                         for a in alerts[:5]
                     ]
                 }
                 
-                prompt = """You are Cardea, a friendly AI security assistant. Generate a brief, conversational security update.
-Be warm but professional. Keep it SHORT (2-3 sentences max).
-Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2-3 sentences", "actions_taken": ["action1", "action2"]}"""
+                prompt = """You are Cardea, a friendly AI security assistant for small businesses. The user is NOT technical.
 
-                ai_response = await self.reason_with_ai(prompt=prompt, context=context, system_role="You are Cardea, a friendly AI cybersecurity assistant.")
+Explain what's happening like you're talking to a friend who owns a coffee shop. NO jargon. Be warm and reassuring but honest.
+
+IMPORTANT: Sometimes alerts are from the company's own IT team testing things. Don't assume it's an attack - ask the user!
+
+Respond in JSON:
+{
+  "greeting": "Hey!" or friendly time-appropriate greeting,
+  "headline": "5-7 word plain English summary",
+  "story": "2-3 sentences explaining what happened in simple terms. Example: 'Someone from an unusual location tried to access your network. This could be a hacker, OR it could be your IT person working from home. I've paused their access for now until you tell me what to do.'",
+  "needs_user_input": true/false (does user need to make a decision?),
+  "question": "Plain English question for user if needs_user_input is true, e.g. 'Do you recognize this activity?'"
+}
+
+Focus on: What happened? Is it dangerous? What should the user do?"""
+
+                ai_response = await self.reason_with_ai(prompt=prompt, context=context, system_role="You are Cardea, a friendly AI security assistant who explains things simply.")
                 
                 if ai_response:
                     json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
                     if json_match:
                         parsed = json.loads(json_match.group())
+                        
+                        # Generate actionable decisions based on context
+                        decisions = []
+                        if parsed.get("needs_user_input", True) and source_ips:
+                            decisions = [
+                                {"id": "safe", "label": "This is safe / expected", "action_type": "dismiss", "severity": "success", "description": "Mark as safe activity (e.g., IT testing)"},
+                                {"id": "block", "label": "Block this", "action_type": "block_ip", "severity": "danger", "target": source_ips[0] if source_ips else None, "description": "Block the source from accessing your network"},
+                                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "description": "Don't block yet, but alert me if it continues"}
+                            ]
+                        
                         result = {
                             "greeting": parsed.get("greeting", "Security Update"),
                             "status_emoji": status_emoji,
                             "headline": parsed.get("headline", f"{escalated_count} alerts need attention"),
-                            "story": parsed.get("story", "I'm analyzing some security events on your network."),
-                            "actions_taken": parsed.get("actions_taken", []),
-                            "decisions": [],
+                            "story": parsed.get("story", "I noticed some unusual activity on your network."),
+                            "question": parsed.get("question", ""),
+                            "actions_taken": ["Monitoring the situation", "Ready to act on your decision"],
+                            "decisions": decisions,
                             "technical_summary": f"{len(threats)} threat clusters detected",
                             "confidence": 0.85,
                             "generated_at": now.isoformat(),
@@ -973,32 +1005,56 @@ Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2
             except Exception as e:
                 logger.warning(f"AI insight generation failed: {e}")
         
-        # Fallback: deterministic response
+        # Fallback: deterministic response with actionable decisions
         hour = now.hour
         greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
+        
+        # Get source IPs for decisions
+        source_ips = []
+        for a in alerts[:5]:
+            if a.raw_data:
+                ip = a.raw_data.get("src_ip") or a.raw_data.get("source_ip")
+                if ip and ip not in source_ips:
+                    source_ips.append(ip)
         
         if len(alerts) == 0:
             result = {
                 "greeting": greeting, "status_emoji": "🟢", "headline": "All quiet on your network",
                 "story": "No security events detected. Your network is running smoothly.",
+                "question": "",
                 "actions_taken": [], "decisions": [], "technical_summary": "No alerts in the current time window",
                 "confidence": 1.0, "generated_at": now.isoformat(), "ai_powered": False
             }
             self._set_cached(cache_key, result)
             return result
         
+        # Build decisions for non-low risk
+        decisions = []
+        if risk_level != "low" and escalated_count > 0:
+            decisions = [
+                {"id": "safe", "label": "This is safe / expected", "action_type": "dismiss", "severity": "success", "description": "Mark as safe activity (e.g., IT testing)"},
+                {"id": "block", "label": "Block this", "action_type": "block_ip", "severity": "danger", "target": source_ips[0] if source_ips else None, "description": "Block the source from your network"},
+                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "description": "Don't block yet, but alert me if it continues"}
+            ]
+        
         if risk_level == "low":
             story = f"I've processed {len(alerts)} routine events. Everything looks normal."
+            question = ""
         elif risk_level == "medium":
-            story = f"I'm keeping an eye on {high_count} elevated alerts. Nothing critical yet, but I'm monitoring closely."
+            story = f"I noticed {high_count} unusual events on your network. This could be someone testing something, or it could need attention. I haven't blocked anything yet."
+            question = "Do you recognize this activity?"
         else:
-            story = f"I've detected {critical_count} critical and {high_count} high-priority alerts that need your attention."
+            story = f"I've spotted {critical_count + high_count} concerning events that look suspicious. I'm holding off on blocking anything until you tell me what to do - it might be your IT team testing."
+            question = "Is this expected activity, or should I block it?"
         
         result = {
             "greeting": greeting, "status_emoji": status_emoji,
-            "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"{escalated_count} alerts need attention",
-            "story": story, "actions_taken": ["Continuous monitoring active", "Threat patterns analyzed"],
-            "decisions": [], "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
+            "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"Unusual activity detected",
+            "story": story, 
+            "question": question,
+            "actions_taken": ["Monitoring the situation", "Ready to act on your decision"],
+            "decisions": decisions, 
+            "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
             "confidence": 0.9, "generated_at": now.isoformat(), "ai_powered": False
         }
         self._set_cached(cache_key, result)

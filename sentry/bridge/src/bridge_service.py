@@ -1033,6 +1033,147 @@ async def get_device_info():
     
     return info
 
+
+# --- COMMAND EXECUTION WITH SAFEGUARDS ---
+
+# Whitelist of allowed commands - ONLY these can be executed
+ALLOWED_COMMANDS = {
+    "block_ip": {
+        "command": ["iptables", "-A", "INPUT", "-s", "{target}", "-j", "DROP"],
+        "requires_target": True,
+        "description": "Block incoming traffic from IP"
+    },
+    "unblock_ip": {
+        "command": ["iptables", "-D", "INPUT", "-s", "{target}", "-j", "DROP"],
+        "requires_target": True,
+        "description": "Unblock IP"
+    },
+    "list_blocked": {
+        "command": ["iptables", "-L", "INPUT", "-n"],
+        "requires_target": False,
+        "description": "List blocked IPs"
+    },
+    "get_status": {
+        "command": ["systemctl", "status", "zeek", "suricata", "--no-pager"],
+        "requires_target": False,
+        "description": "Get service status"
+    }
+}
+
+# IPs that can NEVER be blocked
+PROTECTED_IPS = {
+    "127.0.0.1", "0.0.0.0", "255.255.255.255",
+    "192.168.1.1", "192.168.0.1", "10.0.0.1"  # Common gateways
+}
+
+
+class ExecuteRequest(BaseModel):
+    command_key: str
+    target: Optional[str] = None
+    requested_by: str
+    timestamp: str
+
+
+class ExecuteResponse(BaseModel):
+    success: bool
+    command_key: str
+    output: Optional[str] = None
+    error: Optional[str] = None
+    executed_at: str
+
+
+def is_valid_ip(ip: str) -> bool:
+    """Validate IP address format"""
+    import re
+    pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    if not re.match(pattern, ip):
+        return False
+    parts = ip.split('.')
+    return all(0 <= int(p) <= 255 for p in parts)
+
+
+@app.post("/api/execute", response_model=ExecuteResponse)
+async def execute_command(request: ExecuteRequest):
+    """
+    Execute a whitelisted command from Oracle.
+    SECURITY: Only pre-approved commands can run. No shell injection possible.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Validate command is in whitelist
+    if request.command_key not in ALLOWED_COMMANDS:
+        logger.warning(f"⚠️ Rejected unknown command: {request.command_key} from {request.requested_by}")
+        raise HTTPException(status_code=403, detail=f"Command not allowed: {request.command_key}")
+    
+    cmd_config = ALLOWED_COMMANDS[request.command_key]
+    
+    # Validate target if required
+    if cmd_config["requires_target"]:
+        if not request.target:
+            raise HTTPException(status_code=400, detail="Target IP required for this command")
+        
+        if not is_valid_ip(request.target):
+            raise HTTPException(status_code=400, detail=f"Invalid IP format: {request.target}")
+        
+        if request.target in PROTECTED_IPS:
+            logger.warning(f"⚠️ Blocked attempt to target protected IP: {request.target}")
+            raise HTTPException(status_code=403, detail=f"Cannot target protected IP: {request.target}")
+        
+        # Check for private network gateways
+        if request.target.endswith(".1") and (request.target.startswith("192.168.") or request.target.startswith("10.")):
+            raise HTTPException(status_code=403, detail="Cannot target network gateway")
+    
+    # Build command (no shell - direct execution)
+    command = [
+        part.format(target=request.target) if "{target}" in part else part
+        for part in cmd_config["command"]
+    ]
+    
+    logger.info(f"🔧 Executing: {request.command_key} (target: {request.target}) from {request.requested_by}")
+    
+    try:
+        import subprocess
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=10  # 10 second timeout
+        )
+        
+        if result.returncode == 0:
+            logger.info(f"✅ Command succeeded: {request.command_key}")
+            return ExecuteResponse(
+                success=True,
+                command_key=request.command_key,
+                output=result.stdout[:500] if result.stdout else "OK",
+                executed_at=now.isoformat()
+            )
+        else:
+            logger.warning(f"⚠️ Command failed: {result.stderr}")
+            return ExecuteResponse(
+                success=False,
+                command_key=request.command_key,
+                error=result.stderr[:200] if result.stderr else "Command failed",
+                executed_at=now.isoformat()
+            )
+            
+    except subprocess.TimeoutExpired:
+        return ExecuteResponse(
+            success=False,
+            command_key=request.command_key,
+            error="Command timed out",
+            executed_at=now.isoformat()
+        )
+    except Exception as e:
+        logger.error(f"❌ Command execution error: {e}")
+        return ExecuteResponse(
+            success=False,
+            command_key=request.command_key,
+            error=str(e),
+            executed_at=now.isoformat()
+        )
+
+
 if __name__ == "__main__":
     port = int(os.getenv("BRIDGE_PORT", "8001"))
     uvicorn.run("bridge_service:app", host="0.0.0.0", port=port, reload=True)

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Wifi, WifiOff } from 'lucide-react';
-import type { AIInsight } from '../../types';
+import { Wifi, WifiOff, Shield, AlertTriangle, CheckCircle, XCircle, Eye } from 'lucide-react';
+import type { AIInsight, ActionButton } from '../../types';
+import axios from 'axios';
+
+const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || 'http://localhost:8000';
 
 interface AIPersonaProps {
   insight: AIInsight | null | undefined;
@@ -201,6 +204,52 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
   const emoji = insight?.status_emoji || '🟢';
   const borderColor = riskLevel === 'high' ? 'border-red-900/50' : riskLevel === 'medium' ? 'border-yellow-900/50' : 'border-cyan-900/50';
   const bgGradient = riskLevel === 'high' ? 'from-red-950/30' : riskLevel === 'medium' ? 'from-yellow-950/20' : 'from-cyan-950/20';
+  
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleAction = async (decision: ActionButton) => {
+    setActionLoading(decision.id);
+    setActionResult(null);
+    
+    try {
+      const response = await axios.post(`${ORACLE_URL}/api/actions/execute`, {
+        action_type: decision.action_type,
+        target: decision.target,
+        reason: 'User decision from dashboard'
+      });
+      
+      setActionResult({
+        success: response.data.success,
+        message: response.data.message
+      });
+    } catch (error) {
+      setActionResult({
+        success: false,
+        message: 'Could not complete action. Please try again.'
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const getButtonStyle = (severity: string) => {
+    switch (severity) {
+      case 'danger': return 'bg-red-600 hover:bg-red-500 text-white';
+      case 'warning': return 'bg-yellow-600 hover:bg-yellow-500 text-white';
+      case 'success': return 'bg-green-600 hover:bg-green-500 text-white';
+      default: return 'bg-slate-600 hover:bg-slate-500 text-white';
+    }
+  };
+
+  const getButtonIcon = (actionType: string) => {
+    switch (actionType) {
+      case 'block_ip': return <XCircle className="w-4 h-4" />;
+      case 'dismiss': return <CheckCircle className="w-4 h-4" />;
+      case 'monitor': return <Eye className="w-4 h-4" />;
+      default: return <Shield className="w-4 h-4" />;
+    }
+  };
 
   return (
     <div className={`bg-gradient-to-br ${bgGradient} to-slate-900/80 border ${borderColor} rounded-2xl p-6`}>
@@ -219,6 +268,43 @@ export const AIPersona: React.FC<AIPersonaProps> = ({
             {displayedText}
             {isTyping && <span className="inline-block w-0.5 h-4 bg-cyan-400 ml-0.5 animate-pulse" />}
           </p>
+          
+          {/* Question for user */}
+          {insight?.question && !isTyping && (
+            <p className="text-slate-300 text-sm mt-3 font-medium">
+              {insight.question}
+            </p>
+          )}
+          
+          {/* Action Result */}
+          {actionResult && (
+            <div className={`mt-3 p-3 rounded-lg text-sm ${actionResult.success ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'}`}>
+              {actionResult.success ? <CheckCircle className="w-4 h-4 inline mr-2" /> : <AlertTriangle className="w-4 h-4 inline mr-2" />}
+              {actionResult.message}
+            </div>
+          )}
+          
+          {/* Decision Buttons */}
+          {insight?.decisions && insight.decisions.length > 0 && !actionResult && !isTyping && (
+            <div className="flex flex-wrap gap-2 mt-4">
+              {insight.decisions.map((decision) => (
+                <button
+                  key={decision.id}
+                  onClick={() => handleAction(decision)}
+                  disabled={actionLoading !== null}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${getButtonStyle(decision.severity)} ${actionLoading === decision.id ? 'opacity-50' : ''}`}
+                  title={decision.description}
+                >
+                  {actionLoading === decision.id ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    getButtonIcon(decision.action_type)
+                  )}
+                  {decision.label}
+                </button>
+              ))}
+            </div>
+          )}
           
           {/* Timestamp */}
           {insight?.generated_at && !isTyping && (
