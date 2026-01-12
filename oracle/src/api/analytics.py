@@ -60,7 +60,7 @@ class ThreatAnalyzer:
         
         # Cache for AI responses (TTL: 60 seconds)
         self._cache: dict[str, tuple[Any, datetime]] = {}
-        self._cache_ttl = timedelta(seconds=60)
+        self._cache_ttl = timedelta(minutes=5)
         
         # Initialize Azure OpenAI client
         self.ai_client = None
@@ -903,160 +903,134 @@ Use clear, direct language suitable for a small business owner without cybersecu
     ) -> dict[str, Any]:
         """
         Generate conversational AI insight for the dashboard persona.
-        Only calls Azure OpenAI when there are escalated (high/critical) alerts.
+        Uses deterministic responses with specific details - NO AI calls for routine updates.
+        AI only called for NEW escalated situations that haven't been addressed.
         """
         now = datetime.now(timezone.utc)
         
-        # Count escalated alerts
+        # Count by severity
         severity_counts = Counter(a.severity for a in alerts)
         critical_count = severity_counts.get("critical", 0) + severity_counts.get(AlertSeverity.CRITICAL.value, 0)
         high_count = severity_counts.get("high", 0) + severity_counts.get(AlertSeverity.HIGH.value, 0)
+        medium_count = severity_counts.get("medium", 0) + severity_counts.get(AlertSeverity.MEDIUM.value, 0)
         escalated_count = critical_count + high_count
         
-        # Check cache - key based on alert count and risk level
-        cache_key = f"insight_{len(alerts)}_{critical_count}_{high_count}_{round(risk_score, 1)}"
+        # Cache key includes alert IDs to detect NEW alerts
+        alert_ids = tuple(sorted(a.id for a in alerts[:20]))
+        cache_key = f"insight_{hash(alert_ids)}_{escalated_count}"
+        
+        # 5 minute cache - don't regenerate for same situation
+        self._cache_ttl = timedelta(minutes=5)
         cached = self._get_cached(cache_key)
         if cached:
-            logger.info("📦 Using cached AI insight")
+            logger.info("📦 Using cached insight (5min TTL)")
             return cached
         
-        # Determine status emoji based on risk
-        if risk_score >= 0.7 or critical_count > 0:
-            status_emoji = "🔴"
-            risk_level = "high"
-        elif risk_score >= 0.4 or high_count > 0:
-            status_emoji = "🟡"
-            risk_level = "medium"
-        else:
-            status_emoji = "🟢"
-            risk_level = "low"
-        
-        # Only call AI for escalated issues to conserve credits
-        if escalated_count > 0 and self.ai_client:
-            try:
-                # Get source IPs from alerts for actionable decisions
-                source_ips = list(set(
-                    a.raw_data.get("src_ip") or a.raw_data.get("source_ip") 
-                    for a in alerts[:5] 
-                    if a.raw_data and (a.raw_data.get("src_ip") or a.raw_data.get("source_ip"))
-                ))[:3]
-                
-                context = {
-                    "total_alerts": len(alerts),
-                    "critical_alerts": critical_count,
-                    "high_alerts": high_count,
-                    "risk_score": round(risk_score, 2),
-                    "threat_count": len(threats),
-                    "source_ips": source_ips,
-                    "recent_alerts": [
-                        {"type": a.alert_type, "severity": a.severity, "title": a.title, "source": a.source}
-                        for a in alerts[:5]
-                    ]
-                }
-                
-                prompt = """You are Cardea, a friendly AI security assistant for small businesses. The user is NOT technical.
-
-Explain what's happening like you're talking to a friend who owns a coffee shop. NO jargon. Be warm and reassuring but honest.
-
-IMPORTANT: Sometimes alerts are from the company's own IT team testing things. Don't assume it's an attack - ask the user!
-
-Respond in JSON:
-{
-  "greeting": "Hey!" or friendly time-appropriate greeting,
-  "headline": "5-7 word plain English summary",
-  "story": "2-3 sentences explaining what happened in simple terms. Example: 'Someone from an unusual location tried to access your network. This could be a hacker, OR it could be your IT person working from home. I've paused their access for now until you tell me what to do.'",
-  "needs_user_input": true/false (does user need to make a decision?),
-  "question": "Plain English question for user if needs_user_input is true, e.g. 'Do you recognize this activity?'"
-}
-
-Focus on: What happened? Is it dangerous? What should the user do?"""
-
-                ai_response = await self.reason_with_ai(prompt=prompt, context=context, system_role="You are Cardea, a friendly AI security assistant who explains things simply.")
-                
-                if ai_response:
-                    json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
-                    if json_match:
-                        parsed = json.loads(json_match.group())
-                        
-                        # Generate actionable decisions based on context
-                        decisions = []
-                        if parsed.get("needs_user_input", True) and source_ips:
-                            decisions = [
-                                {"id": "safe", "label": "This is safe / expected", "action_type": "dismiss", "severity": "success", "description": "Mark as safe activity (e.g., IT testing)"},
-                                {"id": "block", "label": "Block this", "action_type": "block_ip", "severity": "danger", "target": source_ips[0] if source_ips else None, "description": "Block the source from accessing your network"},
-                                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "description": "Don't block yet, but alert me if it continues"}
-                            ]
-                        
-                        result = {
-                            "greeting": parsed.get("greeting", "Security Update"),
-                            "status_emoji": status_emoji,
-                            "headline": parsed.get("headline", f"{escalated_count} alerts need attention"),
-                            "story": parsed.get("story", "I noticed some unusual activity on your network."),
-                            "question": parsed.get("question", ""),
-                            "actions_taken": ["Monitoring the situation", "Ready to act on your decision"],
-                            "decisions": decisions,
-                            "technical_summary": f"{len(threats)} threat clusters detected",
-                            "confidence": 0.85,
-                            "generated_at": now.isoformat(),
-                            "ai_powered": True
-                        }
-                        self._set_cached(cache_key, result)
-                        return result
-            except Exception as e:
-                logger.warning(f"AI insight generation failed: {e}")
-        
-        # Fallback: deterministic response with actionable decisions
-        hour = now.hour
-        greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
-        
-        # Get source IPs for decisions
+        # Extract specific details from alerts
         source_ips = []
-        for a in alerts[:5]:
+        alert_types = Counter()
+        alert_sources = Counter()
+        
+        for a in alerts[:10]:
+            alert_types[a.alert_type] += 1
+            alert_sources[a.source] += 1
             if a.raw_data:
                 ip = a.raw_data.get("src_ip") or a.raw_data.get("source_ip")
                 if ip and ip not in source_ips:
                     source_ips.append(ip)
         
+        # Determine status
+        if risk_score >= 0.7 or critical_count > 0:
+            status_emoji = "🔴"
+            risk_level = "high"
+        elif risk_score >= 0.4 or high_count > 0:
+            status_emoji = "🟡" 
+            risk_level = "medium"
+        else:
+            status_emoji = "🟢"
+            risk_level = "low"
+        
+        # Time-based greeting
+        hour = now.hour
+        greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
+        
+        # Build SPECIFIC message based on what we actually found
         if len(alerts) == 0:
             result = {
-                "greeting": greeting, "status_emoji": "🟢", "headline": "All quiet on your network",
-                "story": "No security events detected. Your network is running smoothly.",
+                "greeting": greeting,
+                "status_emoji": "🟢",
+                "headline": "All clear",
+                "story": "Your network is quiet. No unusual activity detected.",
                 "question": "",
-                "actions_taken": [], "decisions": [], "technical_summary": "No alerts in the current time window",
-                "confidence": 1.0, "generated_at": now.isoformat(), "ai_powered": False
+                "actions_taken": [],
+                "decisions": [],
+                "technical_summary": "No alerts",
+                "confidence": 1.0,
+                "generated_at": now.isoformat(),
+                "ai_powered": False
             }
             self._set_cached(cache_key, result)
             return result
         
-        # Build decisions for non-low risk
+        # Build specific description of what was found
+        top_type = alert_types.most_common(1)[0][0] if alert_types else "activity"
+        top_source = alert_sources.most_common(1)[0][0] if alert_sources else "your network"
+        
+        # Translate alert types to plain English
+        type_descriptions = {
+            "network_anomaly": "unusual network traffic patterns",
+            "intrusion_detection": "someone trying to access your system",
+            "malware_detection": "potentially harmful software",
+            "suspicious_behavior": "unusual behavior on your network",
+            "data_exfiltration": "data being sent outside your network",
+            "unauthorized_access": "an unauthorized login attempt"
+        }
+        what_found = type_descriptions.get(top_type, f"unusual activity ({top_type})")
+        
+        # Build decisions based on what we found
         decisions = []
-        if risk_level != "low" and escalated_count > 0:
+        if escalated_count > 0 and source_ips:
+            primary_ip = source_ips[0]
             decisions = [
-                {"id": "safe", "label": "This is safe / expected", "action_type": "dismiss", "severity": "success", "description": "Mark as safe activity (e.g., IT testing)"},
-                {"id": "block", "label": "Block this", "action_type": "block_ip", "severity": "danger", "target": source_ips[0] if source_ips else None, "description": "Block the source from your network"},
-                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "description": "Don't block yet, but alert me if it continues"}
+                {"id": "safe", "label": "I recognize this - it's safe", "action_type": "dismiss", "severity": "success", "target": primary_ip, "description": f"Mark {primary_ip} as trusted"},
+                {"id": "block", "label": f"Block {primary_ip}", "action_type": "block_ip", "severity": "danger", "target": primary_ip, "description": f"Block all traffic from {primary_ip}"},
+                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "target": primary_ip, "description": "Don't act yet, but keep me informed"}
             ]
         
+        # Build the story with SPECIFIC details
         if risk_level == "low":
-            story = f"I've processed {len(alerts)} routine events. Everything looks normal."
+            story = f"I've logged {len(alerts)} routine events from {top_source}. Nothing concerning - just keeping track."
             question = ""
+            decisions = []  # No action needed for low risk
         elif risk_level == "medium":
-            story = f"I noticed {high_count} unusual events on your network. This could be someone testing something, or it could need attention. I haven't blocked anything yet."
-            question = "Do you recognize this activity?"
-        else:
-            story = f"I've spotted {critical_count + high_count} concerning events that look suspicious. I'm holding off on blocking anything until you tell me what to do - it might be your IT team testing."
-            question = "Is this expected activity, or should I block it?"
+            if source_ips:
+                story = f"I detected {what_found} from IP address {source_ips[0]}. This triggered {high_count} elevated alerts. It might be normal activity, but I wanted to check with you first."
+                question = f"Do you recognize activity from {source_ips[0]}?"
+            else:
+                story = f"I noticed {what_found} - {high_count} events that look a bit unusual. Could be nothing, but worth a quick look."
+                question = "Does this sound like expected activity?"
+        else:  # high risk
+            if source_ips:
+                story = f"⚠️ I found {what_found} from {source_ips[0]}. This looks suspicious - {critical_count + high_count} serious alerts. I haven't blocked anything yet because I want your call first."
+                question = f"Should I block {source_ips[0]}?"
+            else:
+                story = f"⚠️ Detected {what_found} with {critical_count + high_count} serious alerts. This needs attention."
+                question = "What would you like me to do?"
         
         result = {
-            "greeting": greeting, "status_emoji": status_emoji,
-            "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"Unusual activity detected",
-            "story": story, 
+            "greeting": greeting,
+            "status_emoji": status_emoji,
+            "headline": f"{what_found.capitalize()}" if escalated_count > 0 else f"{len(alerts)} events logged",
+            "story": story,
             "question": question,
-            "actions_taken": ["Monitoring the situation", "Ready to act on your decision"],
-            "decisions": decisions, 
-            "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
-            "confidence": 0.9, "generated_at": now.isoformat(), "ai_powered": False
+            "actions_taken": [f"Monitoring {top_source}", f"Analyzed {len(alerts)} events"],
+            "decisions": decisions,
+            "technical_summary": f"{len(alerts)} alerts, {escalated_count} escalated, risk: {round(risk_score * 100)}%",
+            "confidence": 0.9,
+            "generated_at": now.isoformat(),
+            "ai_powered": False  # Deterministic - no AI tokens used!
         }
+        
         self._set_cached(cache_key, result)
         return result
 
