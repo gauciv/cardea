@@ -1,39 +1,56 @@
-import { useState } from 'react';
-import { User, Mail, Shield, Calendar, Activity, Server, AlertTriangle, CheckCircle, Clock, Edit2, Camera } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { User, Mail, Calendar, Server, AlertTriangle, CheckCircle, Edit2, Camera } from 'lucide-react';
 import { Layout } from './Layout';
 import { PageHeader } from './PageHeader';
 import { useAuth } from '../lib/useAuth';
 import { getDisplayName } from '../lib/auth';
 
+const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
+
 export const ProfilePage = () => {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(user ? getDisplayName(user) : 'User');
+  const actualName = user ? getDisplayName(user) : '';
+  const [displayName, setDisplayName] = useState(actualName);
+  const [deviceCount, setDeviceCount] = useState(0);
 
-  const email = user?.userDetails || 'user@example.com';
+  const email = user?.userDetails || '';
   const provider = user?.identityProvider || 'local';
-  const role = user?.userRoles?.includes('admin') ? 'Administrator' : 'Security Analyst';
-  
-  // Mock stats - in production these would come from the API
-  const stats = {
-    devicesManaged: 1,
-    alertsReviewed: 47,
-    actionsPerformed: 12,
-    memberSince: '2026-01-01',
-    lastLogin: new Date().toISOString()
-  };
+
+  // Fetch actual device count
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const token = localStorage.getItem('cardea_auth_token');
+        const res = await axios.get(`${ORACLE_URL}/api/devices/list`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        setDeviceCount(res.data?.length || 0);
+      } catch {
+        setDeviceCount(0);
+      }
+    };
+    fetchDevices();
+  }, []);
+
+  // Update displayName when user changes
+  useEffect(() => {
+    if (actualName) setDisplayName(actualName);
+  }, [actualName]);
 
   const getProviderInfo = () => {
     const p = provider.toLowerCase();
-    if (p.includes('google')) return { name: 'Google', color: 'bg-red-500', icon: '🔴' };
-    if (p.includes('microsoft') || p.includes('aad') || p.includes('azure')) return { name: 'Microsoft', color: 'bg-blue-500', icon: '🔵' };
-    if (p.includes('github')) return { name: 'GitHub', color: 'bg-slate-600', icon: '⚫' };
-    return { name: 'Email', color: 'bg-cyan-500', icon: '🔷' };
+    if (p.includes('google')) return { name: 'Google', color: 'bg-red-500' };
+    if (p.includes('microsoft') || p.includes('aad') || p.includes('azure')) return { name: 'Microsoft', color: 'bg-blue-500' };
+    if (p.includes('github')) return { name: 'GitHub', color: 'bg-slate-600' };
+    return { name: 'Email', color: 'bg-cyan-500' };
   };
 
   const providerInfo = getProviderInfo();
 
   const getInitials = () => {
+    if (!displayName) return '??';
     const parts = displayName.split(' ');
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     return displayName.slice(0, 2).toUpperCase();
@@ -75,7 +92,7 @@ export const ProfilePage = () => {
                     />
                   ) : (
                     <>
-                      <h2 className="text-lg font-semibold text-white">{displayName}</h2>
+                      <h2 className="text-lg font-semibold text-white">{displayName || 'User'}</h2>
                       <button onClick={() => setIsEditing(true)} className="p-1 hover:bg-slate-800 rounded">
                         <Edit2 className="w-3 h-3 text-slate-500" />
                       </button>
@@ -94,26 +111,16 @@ export const ProfilePage = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
             <Server className="w-5 h-5 text-cyan-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{stats.devicesManaged}</p>
+            <p className="text-2xl font-bold text-white">{deviceCount}</p>
             <p className="text-[10px] text-slate-500 uppercase">Devices</p>
           </div>
           <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
             <AlertTriangle className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{stats.alertsReviewed}</p>
+            <p className="text-2xl font-bold text-white">—</p>
             <p className="text-[10px] text-slate-500 uppercase">Alerts Reviewed</p>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
-            <CheckCircle className="w-5 h-5 text-green-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">{stats.actionsPerformed}</p>
-            <p className="text-[10px] text-slate-500 uppercase">Actions Taken</p>
-          </div>
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
-            <Activity className="w-5 h-5 text-purple-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-white">99%</p>
-            <p className="text-[10px] text-slate-500 uppercase">Uptime</p>
           </div>
         </div>
 
@@ -125,7 +132,7 @@ export const ProfilePage = () => {
             <User className="w-5 h-5 text-slate-500" />
             <div className="flex-1">
               <p className="text-[10px] text-slate-500 uppercase">Display Name</p>
-              <p className="text-sm text-white">{displayName}</p>
+              <p className="text-sm text-white">{displayName || '—'}</p>
             </div>
           </div>
 
@@ -133,32 +140,15 @@ export const ProfilePage = () => {
             <Mail className="w-5 h-5 text-slate-500" />
             <div className="flex-1">
               <p className="text-[10px] text-slate-500 uppercase">Email</p>
-              <p className="text-sm text-white">{email}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 py-3 border-b border-slate-800">
-            <Shield className="w-5 h-5 text-slate-500" />
-            <div className="flex-1">
-              <p className="text-[10px] text-slate-500 uppercase">Role</p>
-              <p className="text-sm text-white">{role}</p>
-            </div>
-            <span className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-[10px] rounded">Active</span>
-          </div>
-
-          <div className="flex items-center gap-3 py-3 border-b border-slate-800">
-            <Calendar className="w-5 h-5 text-slate-500" />
-            <div className="flex-1">
-              <p className="text-[10px] text-slate-500 uppercase">Member Since</p>
-              <p className="text-sm text-white">{new Date(stats.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+              <p className="text-sm text-white">{email || '—'}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 py-3">
-            <Clock className="w-5 h-5 text-slate-500" />
+            <Calendar className="w-5 h-5 text-slate-500" />
             <div className="flex-1">
               <p className="text-[10px] text-slate-500 uppercase">Last Login</p>
-              <p className="text-sm text-white">{new Date(stats.lastLogin).toLocaleString()}</p>
+              <p className="text-sm text-white">{new Date().toLocaleString()}</p>
             </div>
           </div>
         </div>
