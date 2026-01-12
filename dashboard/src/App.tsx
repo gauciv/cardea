@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Eye, BarChart3 } from "lucide-react";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, NoDevicesState, ThreatMap } from "./components/dashboard";
-import { OnboardingOverlay } from "./components/onboarding";
+import { AIPersona, SimpleStats, ThreatMap } from "./components/dashboard";
 import { useDashboardData } from "./hooks/useDashboardData";
-import { useOnboarding } from "./hooks/useOnboarding";
 
 const App: React.FC = () => {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
@@ -16,24 +14,16 @@ const App: React.FC = () => {
   const effectiveAuth = isDev || isAuthenticated;
 
   const { data, isLoading, hasDevices, devices, error, refetch } = useDashboardData(effectiveAuth);
-  const { showOnboarding, onboardingStep, nextStep, skip } = useOnboarding(hasDevices);
   
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
   const [threatResolved, setThreatResolved] = useState(false);
-  const onboardingRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !effectiveAuth) {
       navigate("/login", { replace: true });
     }
   }, [authLoading, effectiveAuth, navigate]);
-
-  useEffect(() => {
-    if (showOnboarding) {
-      setTimeout(() => onboardingRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-    }
-  }, [showOnboarding]);
 
   useEffect(() => {
     if (error) setToast({ message: error, type: "error" });
@@ -87,10 +77,7 @@ const App: React.FC = () => {
       {/* Main */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         {hasDevices === false && !isLoading ? (
-          <>
-            <AIPersona insight={null} isLoading={false} isOffline={true} />
-            <NoDevicesState showOnboarding={showOnboarding} onboardingStep={onboardingStep} onNextStep={nextStep} onSkip={skip} onboardingRef={onboardingRef} />
-          </>
+          <AIPersona insight={null} isLoading={false} isOffline={true} />
         ) : hasDevices === true ? (
           <>
             {/* AI Persona - Shows everything: message, actions, execution */}
@@ -121,9 +108,6 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
-
-      {/* Onboarding overlays */}
-      {showOnboarding && hasDevices === false && <OnboardingOverlay step={onboardingStep} onNext={nextStep} onSkip={skip} />}
     </div>
   );
 };
