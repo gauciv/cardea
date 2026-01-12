@@ -63,7 +63,14 @@ const App: React.FC = () => {
 
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {hasDevices === false && !isLoading ? (
-          <DeviceSetup />
+          <>
+            <AIPersona 
+              insight={null} 
+              isLoading={false} 
+              isOffline={true}
+            />
+            <DeviceSetup />
+          </>
         ) : hasDevices === true ? (
           <>
             <AIPersona 
