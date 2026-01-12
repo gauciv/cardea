@@ -58,6 +58,10 @@ class ThreatAnalyzer:
             AlertType.UNAUTHORIZED_ACCESS: 0.9
         }
         
+        # Cache for AI responses (TTL: 60 seconds)
+        self._cache: dict[str, tuple[Any, datetime]] = {}
+        self._cache_ttl = timedelta(seconds=60)
+        
         # Initialize Azure OpenAI client
         self.ai_client = None
         if settings.ai_is_enabled and settings.AZURE_OPENAI_API_KEY:
@@ -81,13 +85,25 @@ class ThreatAnalyzer:
     
     def _load_threat_patterns(self) -> dict[str, Any]:
         """Load threat intelligence patterns"""
-        # In production, this would load from threat intelligence feeds
         return {
             "malicious_ips": set(),
             "suspicious_domains": set(),
             "attack_signatures": [],
             "behavioral_patterns": {}
         }
+
+    def _get_cached(self, key: str) -> Any | None:
+        """Get cached value if not expired"""
+        if key in self._cache:
+            value, timestamp = self._cache[key]
+            if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
+                return value
+            del self._cache[key]
+        return None
+
+    def _set_cached(self, key: str, value: Any) -> None:
+        """Cache a value with current timestamp"""
+        self._cache[key] = (value, datetime.now(timezone.utc))
     
     async def reason_with_ai(
         self, 
@@ -409,6 +425,12 @@ Respond in JSON format:
         Comprehensive threat analysis with AI-powered insights
         Includes adaptive threshold recommendations for Sentry configuration
         """
+        # Check cache first (60s TTL)
+        cache_key = f"analyze_{time_window}"
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.info("📦 Using cached threat analysis")
+            return cached
         
         try:
             from sqlalchemy import select, and_
@@ -448,17 +470,17 @@ Respond in JSON format:
                 # Calculate overall risk score
                 risk_score = self._calculate_overall_risk(threats_detected)
                 
-                # Generate AI-powered recommendations
-                recommendations = await self._generate_recommendations_ai(threats_detected) if self.ai_client else self._generate_recommendations_deterministic(threats_detected)
+                # Use deterministic recommendations (save AI tokens for conversational insight only)
+                recommendations = self._generate_recommendations_deterministic(threats_detected)
                 
-                # Generate adaptive threshold recommendation
-                threshold_recommendation = await self._recommend_threshold_adjustment(
+                # Use deterministic threshold recommendation
+                threshold_recommendation = self._recommend_threshold_deterministic(
                     alerts=alerts,
                     threats=threats_detected,
                     time_window=time_window
                 )
                 
-                return {
+                result = {
                     "threats": threats_detected,
                     "risk_score": risk_score,
                     "recommendations": recommendations,
@@ -466,6 +488,10 @@ Respond in JSON format:
                     "threshold_recommendation": threshold_recommendation,
                     "ai_enhanced": self.ai_client is not None
                 }
+                
+                # Cache the result
+                self._set_cached(cache_key, result)
+                return result
                 
         except Exception as e:
             logger.error(f"Threat analysis failed: {e}")
@@ -887,6 +913,13 @@ Use clear, direct language suitable for a small business owner without cybersecu
         high_count = severity_counts.get("high", 0) + severity_counts.get(AlertSeverity.HIGH.value, 0)
         escalated_count = critical_count + high_count
         
+        # Check cache - key based on alert count and risk level
+        cache_key = f"insight_{len(alerts)}_{critical_count}_{high_count}_{round(risk_score, 1)}"
+        cached = self._get_cached(cache_key)
+        if cached:
+            logger.info("📦 Using cached AI insight")
+            return cached
+        
         # Determine status emoji based on risk
         if risk_score >= 0.7 or critical_count > 0:
             status_emoji = "🔴"
@@ -923,7 +956,7 @@ Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2
                     json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
                     if json_match:
                         parsed = json.loads(json_match.group())
-                        return {
+                        result = {
                             "greeting": parsed.get("greeting", "Security Update"),
                             "status_emoji": status_emoji,
                             "headline": parsed.get("headline", f"{escalated_count} alerts need attention"),
@@ -935,6 +968,8 @@ Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2
                             "generated_at": now.isoformat(),
                             "ai_powered": True
                         }
+                        self._set_cached(cache_key, result)
+                        return result
             except Exception as e:
                 logger.warning(f"AI insight generation failed: {e}")
         
@@ -943,12 +978,14 @@ Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2
         greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
         
         if len(alerts) == 0:
-            return {
+            result = {
                 "greeting": greeting, "status_emoji": "🟢", "headline": "All quiet on your network",
                 "story": "No security events detected. Your network is running smoothly.",
                 "actions_taken": [], "decisions": [], "technical_summary": "No alerts in the current time window",
                 "confidence": 1.0, "generated_at": now.isoformat(), "ai_powered": False
             }
+            self._set_cached(cache_key, result)
+            return result
         
         if risk_level == "low":
             story = f"I've processed {len(alerts)} routine events. Everything looks normal."
@@ -957,13 +994,15 @@ Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2
         else:
             story = f"I've detected {critical_count} critical and {high_count} high-priority alerts that need your attention."
         
-        return {
+        result = {
             "greeting": greeting, "status_emoji": status_emoji,
             "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"{escalated_count} alerts need attention",
             "story": story, "actions_taken": ["Continuous monitoring active", "Threat patterns analyzed"],
             "decisions": [], "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
             "confidence": 0.9, "generated_at": now.isoformat(), "ai_powered": False
         }
+        self._set_cached(cache_key, result)
+        return result
 
 
 class AlertCorrelator:
