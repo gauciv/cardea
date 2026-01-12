@@ -50,9 +50,10 @@ const App: React.FC = () => {
 
   if (!effectiveAuth) return null;
 
-  // Compute risk level from data
+  // Compute risk level - prefer insight's risk_level, fallback to score calculation
   const riskScore = data?.risk_score || 0;
-  const riskLevel: 'low' | 'medium' | 'high' = riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low';
+  const insightRiskLevel = data?.ai_insight?.risk_level;
+  const riskLevel: 'low' | 'medium' | 'high' = insightRiskLevel || (riskScore >= 0.7 ? 'high' : riskScore >= 0.4 ? 'medium' : 'low');
   
   // Use actual device status from devices list, not Oracle connection status
   const onlineDevices = devices.filter(d => d.status === 'online');

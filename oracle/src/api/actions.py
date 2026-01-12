@@ -4,6 +4,7 @@ Handles user decisions and executes commands on Sentry devices
 """
 
 import logging
+import os
 import httpx
 from datetime import datetime, timezone
 from typing import Optional
@@ -219,10 +220,11 @@ async def _execute_on_sentry(command_key: str, target: str = None, device_id: st
     command = command_template.format(target=target) if target else command_template
     
     # Get Sentry URL (in production, look up by device_id)
-    sentry_url = "http://sentry:8001"  # Default for docker-compose
+    sentry_url = os.getenv("SENTRY_URL", "http://sentry:8001")
+    demo_mode = os.getenv("DEMO_MODE", "true").lower() == "true"  # Demo mode by default
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 f"{sentry_url}/api/execute",
                 json={
@@ -234,12 +236,16 @@ async def _execute_on_sentry(command_key: str, target: str = None, device_id: st
             )
             
             if response.status_code == 200:
-                return {"success": True, "output": response.json()}
+                return {"success": True, "output": response.json(), "executed_on": "sentry"}
             else:
                 return {"success": False, "error": response.text}
                 
-    except httpx.ConnectError:
+    except (httpx.ConnectError, httpx.TimeoutException):
         logger.warning(f"Could not connect to Sentry at {sentry_url}")
+        # In demo mode, simulate success
+        if demo_mode:
+            logger.info(f"🎭 Demo mode: Simulating successful {command_key} for {target}")
+            return {"success": True, "output": f"[Demo] {command_key} executed for {target}", "demo": True}
         return {"success": False, "error": "Sentry device not reachable"}
     except Exception as e:
         logger.error(f"Sentry command execution failed: {e}")

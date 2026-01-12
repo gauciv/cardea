@@ -505,8 +505,13 @@ Respond in JSON format:
                     if threat_info:
                         threats_detected.append(threat_info)
                 
-                # Calculate overall risk score
+                # Calculate overall risk score - use alerts directly if no threats detected
                 risk_score = self._calculate_overall_risk(threats_detected)
+                if risk_score == 0 and alerts:
+                    # Fallback: calculate from raw alert severities
+                    severity_weights = {"critical": 1.0, "high": 0.8, "medium": 0.5, "low": 0.2}
+                    total = sum(severity_weights.get(a.severity, 0.3) for a in alerts)
+                    risk_score = min(1.0, total / max(len(alerts), 1) * 0.8)
                 
                 # Use deterministic recommendations (save AI tokens for conversational insight only)
                 recommendations = self._generate_recommendations_deterministic(threats_detected)
@@ -963,8 +968,13 @@ Use clear, direct language suitable for a small business owner without cybersecu
                 "technical_summary": "No alerts",
                 "confidence": 1.0,
                 "generated_at": now.isoformat(),
-                "ai_powered": False
+                "ai_powered": False,
+                "risk_level": "low"
             }
+        
+        # Count severities across ALL alerts
+        all_severities = [a.severity for a in alerts]
+        high_count = sum(1 for s in all_severities if s in ("high", "critical"))
         
         # GROUP alerts by type - treat all same-type alerts as ONE problem
         alert_groups = {}
@@ -1001,10 +1011,13 @@ Use clear, direct language suitable for a small business owner without cybersecu
         source_ips = list(primary_group["source_ips"])[:3]
         max_severity = max(primary_group["severities"], key=lambda s: severity_order.get(s, 0))
         
-        # Determine risk level from the primary group
-        if max_severity in ("critical", "high"):
-            status_emoji = "🟡"  # Yellow - needs attention but not panic
-            risk_level = "medium"
+        # Determine risk level - HIGH if any high/critical alerts exist
+        if max_severity == "critical":
+            status_emoji = "🔴"
+            risk_level = "high"
+        elif max_severity == "high" or high_count > 0:
+            status_emoji = "🟡"
+            risk_level = "medium"  # Yellow for high - needs attention
         else:
             status_emoji = "🟢"
             risk_level = "low"
@@ -1020,12 +1033,13 @@ Use clear, direct language suitable for a small business owner without cybersecu
         }
         what_found = type_descriptions.get(primary_type, "unusual activity")
         
-        # Build ONE simple decision for the user
+        # Build ONE simple decision for the user - ALWAYS show if high severity
         decisions = []
         active_threat = None
+        primary_ip = source_ips[0] if source_ips else "unknown source"
         
-        if source_ips and max_severity in ("critical", "high", "medium"):
-            primary_ip = source_ips[0]
+        # Show action buttons if there are HIGH/CRITICAL alerts
+        if max_severity in ("critical", "high"):
             active_threat = {
                 "id": f"threat_{primary_type}",
                 "type": primary_type,
@@ -1034,34 +1048,37 @@ Use clear, direct language suitable for a small business owner without cybersecu
                 "alert_count": alert_count,
                 "severity": max_severity,
                 "first_seen": primary_group["first_seen"].isoformat(),
-                "status": "pending"  # pending, executing, resolved
+                "status": "pending"
             }
-            decisions = [
-                {"id": "safe", "label": "It's safe - ignore", "action_type": "dismiss", "severity": "success", "target": primary_ip, "description": "This is expected activity"},
-                {"id": "block", "label": f"Block {primary_ip}", "action_type": "block_ip", "severity": "danger", "target": primary_ip, "description": "Block this source"},
-            ]
-            story = f"I've detected {what_found} ({alert_count} events) from {primary_ip}. What would you like me to do?"
-            question = ""
-        elif alert_count > 0:
-            story = f"I've logged {alert_count} {what_found} events. Nothing critical - just keeping track."
-            question = ""
+            
+            if source_ips:
+                decisions = [
+                    {"id": "safe", "label": "It's safe - ignore", "action_type": "dismiss", "severity": "success", "target": primary_ip, "description": "This is expected activity"},
+                    {"id": "block", "label": f"Block {primary_ip}", "action_type": "block_ip", "severity": "danger", "target": primary_ip, "description": "Block this source"},
+                ]
+                story = f"I've detected {what_found} ({alert_count} events) from {primary_ip}. What would you like me to do?"
+            else:
+                decisions = [
+                    {"id": "safe", "label": "It's safe - ignore all", "action_type": "dismiss", "severity": "success", "target": None, "description": "This is expected activity"},
+                ]
+                story = f"I've detected {alert_count} {what_found} events. These are flagged as {max_severity} severity. Is this expected?"
         else:
-            story = "Your network looks normal."
-            question = ""
+            story = f"I've logged {len(alerts)} events. Everything looks routine."
         
         return {
             "greeting": greeting,
             "status_emoji": status_emoji,
-            "headline": what_found.capitalize() if active_threat else "All monitored",
+            "headline": f"{what_found.capitalize()}" if active_threat else "All monitored",
             "story": story,
-            "question": question,
+            "question": "",
             "actions_taken": [f"Grouped {len(alerts)} alerts into {len(alert_groups)} categories"],
             "decisions": decisions,
             "active_threat": active_threat,
-            "technical_summary": f"{len(alerts)} total alerts, {len(alert_groups)} groups",
+            "technical_summary": f"{len(alerts)} total, {high_count} high severity",
             "confidence": 0.9,
             "generated_at": now.isoformat(),
-            "ai_powered": False
+            "ai_powered": False,
+            "risk_level": risk_level
         }
 
 

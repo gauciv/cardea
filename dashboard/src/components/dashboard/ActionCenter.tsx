@@ -41,17 +41,18 @@ export const ActionCenter: React.FC<ActionCenterProps> = ({ threat, decisions, o
     );
   }
 
-  // Resolved state
+  // Resolved state - celebratory
   if (resolved) {
     return (
-      <div className="bg-gradient-to-br from-green-950/20 to-slate-900 border border-green-900/30 rounded-xl p-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-green-500/10 rounded-lg">
-            <CheckCircle className="w-5 h-5 text-green-500" />
+      <div className="bg-gradient-to-br from-green-950/30 to-slate-900 border border-green-500/30 rounded-xl p-5 shadow-lg shadow-green-500/5">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-green-500/20 rounded-xl">
+            <CheckCircle className="w-6 h-6 text-green-400" />
           </div>
           <div className="flex-1">
-            <p className="text-green-400 font-medium text-sm">Threat Resolved</p>
-            <p className="text-slate-400 text-xs">{resultMessage}</p>
+            <p className="text-green-400 font-semibold">✓ Threat Neutralized</p>
+            <p className="text-slate-300 text-sm mt-1">{resultMessage}</p>
+            <p className="text-slate-500 text-xs mt-2">Your network perimeter is now secure.</p>
           </div>
         </div>
       </div>
@@ -62,17 +63,22 @@ export const ActionCenter: React.FC<ActionCenterProps> = ({ threat, decisions, o
     setExecuting(true);
     setExpanded(true);
     
-    // Initialize steps
-    const actionSteps: ExecutionStep[] = [
-      { label: 'Preparing action...', status: 'running' },
-      { label: decision.action_type === 'block_ip' ? `Blocking ${decision.target}...` : 'Processing...', status: 'pending' },
-      { label: 'Verifying result...', status: 'pending' },
+    // Initialize steps based on action type
+    const isBlock = decision.action_type === 'block_ip';
+    const actionSteps: ExecutionStep[] = isBlock ? [
+      { label: 'Connecting to Sentry...', status: 'running' },
+      { label: `Executing iptables block for ${decision.target}...`, status: 'pending' },
+      { label: 'Verifying firewall rules...', status: 'pending' },
+    ] : [
+      { label: 'Processing request...', status: 'running' },
+      { label: 'Updating threat database...', status: 'pending' },
+      { label: 'Confirming changes...', status: 'pending' },
     ];
     setSteps(actionSteps);
 
     try {
-      // Step 1: Prepare
-      await new Promise(r => setTimeout(r, 500));
+      // Step 1: Connect/Process
+      await new Promise(r => setTimeout(r, 600));
       setSteps(s => s.map((step, i) => i === 0 ? { ...step, status: 'success' } : i === 1 ? { ...step, status: 'running' } : step));
 
       // Step 2: Execute
@@ -82,7 +88,7 @@ export const ActionCenter: React.FC<ActionCenterProps> = ({ threat, decisions, o
         reason: 'User action from dashboard'
       });
 
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 400));
       
       if (response.data.success) {
         setSteps(s => s.map((step, i) => i === 1 ? { ...step, status: 'success' } : i === 2 ? { ...step, status: 'running' } : step));
@@ -97,7 +103,7 @@ export const ActionCenter: React.FC<ActionCenterProps> = ({ threat, decisions, o
         setTimeout(() => {
           setResolved(true);
           onResolved?.();
-        }, 1000);
+        }, 1200);
       } else {
         setSteps(s => s.map((step, idx) => idx === 1 ? { ...step, status: 'error', message: response.data.message } : step));
       }

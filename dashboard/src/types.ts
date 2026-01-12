@@ -45,6 +45,7 @@ export interface AIInsight {
   generated_at?: string;
   ai_powered: boolean;
   rag_enhanced?: boolean;
+  risk_level?: 'low' | 'medium' | 'high';
   
   // Legacy fields for backward compatibility
   summary?: string;
