@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Eye, BarChart3 } from "lucide-react";
-import { UserMenu } from "./components/UserMenu";
-import { useAuth } from "./lib/useAuth";
+import { RefreshCw } from "lucide-react";
+import { PageHeader } from "./components/PageHeader";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, ThreatMap, DetailedLogs } from "./components/dashboard";
+import { AIPersona, SimpleStats, ThreatMap, DetailedLogs, DeviceSetup } from "./components/dashboard";
 import { useDashboardData } from "./hooks/useDashboardData";
+import { useAuth } from "./lib/useAuth";
 
 const App: React.FC = () => {
-  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const isDev = import.meta.env.DEV;
   const effectiveAuth = isDev || isAuthenticated;
@@ -56,28 +56,16 @@ const App: React.FC = () => {
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
       {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-40 px-6 py-3">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <img src="/cardea-logo.png" alt="Cardea" className="w-6 h-6" />
-            <span className="font-bold text-sm tracking-tight">CARDEA</span>
-          </div>
-          <div className="flex items-center gap-4">
-            {hasDevices && (
-              <button onClick={() => setViewMode(v => v === "simple" ? "detailed" : "simple")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-medium transition-all ${viewMode === "detailed" ? "bg-cyan-900/40 text-cyan-400" : "bg-slate-800/50 text-slate-500 hover:text-slate-300"}`}>
-                {viewMode === "detailed" ? <><BarChart3 className="w-3 h-3" />Detailed</> : <><Eye className="w-3 h-3" />Simple</>}
-              </button>
-            )}
-            {user && <UserMenu user={user} />}
-          </div>
-        </div>
-      </header>
+      <PageHeader 
+        showViewToggle={hasDevices === true}
+        viewMode={viewMode}
+        onViewModeChange={() => setViewMode(v => v === "simple" ? "detailed" : "simple")}
+      />
 
       {/* Main */}
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
         {hasDevices === false && !isLoading ? (
-          <AIPersona insight={null} isLoading={false} isOffline={true} />
+          <DeviceSetup />
         ) : hasDevices === true ? (
           <>
             {/* AI Persona - Shows everything: message, actions, execution */}

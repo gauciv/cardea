@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Shield, Moon, Sun, Volume2, VolumeX, Mail, Smartphone, Clock, Save, Check } from 'lucide-react';
+import { Bell, Shield, Moon, Sun, Volume2, VolumeX, Mail, Smartphone, Clock, Save, Check } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 import { useAuth } from '../lib/useAuth';
 
 interface NotificationSettings {
@@ -27,7 +27,6 @@ interface SecuritySettings {
 }
 
 export const SettingsPage = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<'notifications' | 'display' | 'security'>('notifications');
@@ -84,30 +83,25 @@ export const SettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-40 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-400" />
-          </button>
+      <PageHeader />
+
+      <main className="max-w-3xl mx-auto px-6 py-8">
+        {/* Page Title */}
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-lg font-semibold">Settings</h1>
             <p className="text-xs text-slate-500">Customize your Cardea experience</p>
           </div>
-          <div className="ml-auto">
-            <button
-              onClick={handleSave}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                saved ? 'bg-green-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-              }`}
-            >
-              {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save Changes</>}
-            </button>
-          </div>
+          <button
+            onClick={handleSave}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              saved ? 'bg-green-600 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+            }`}
+          >
+            {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save</>}
+          </button>
         </div>
-      </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-8">
         {/* Tabs */}
         <div className="flex gap-1 p-1 bg-slate-900 rounded-lg mb-8">
           {[

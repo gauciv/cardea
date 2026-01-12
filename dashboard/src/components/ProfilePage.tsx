@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Shield, Calendar, Activity, Server, AlertTriangle, CheckCircle, Clock, Edit2, Camera } from 'lucide-react';
+import { User, Mail, Shield, Calendar, Activity, Server, AlertTriangle, CheckCircle, Clock, Edit2, Camera } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 import { useAuth } from '../lib/useAuth';
 import { getDisplayName } from '../lib/auth';
 
 export const ProfilePage = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user ? getDisplayName(user) : 'User');
@@ -41,18 +40,7 @@ export const ProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-40 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5 text-slate-400" />
-          </button>
-          <div>
-            <h1 className="text-lg font-semibold">Profile</h1>
-            <p className="text-xs text-slate-500">Manage your account</p>
-          </div>
-        </div>
-      </header>
+      <PageHeader />
 
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Profile Card */}

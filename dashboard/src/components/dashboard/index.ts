@@ -4,6 +4,7 @@ export { StatsGrid } from './StatsGrid';
 export { AlertTable } from './AlertTable';
 export { ThreatMap } from './ThreatMap';
 export { DetailedLogs } from './DetailedLogs';
+export { DeviceSetup } from './DeviceSetup';
 export { AlertTimeline } from './AlertTimeline';
 export { ActionableAlertsPanel } from './ActionableAlerts';
 export { SentryHealth } from './SentryHealth';

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Server, Plus, Wifi, WifiOff, RefreshCw, Trash2, ArrowLeft, Copy, CheckCircle, X, AlertTriangle } from 'lucide-react';
+import { Server, Plus, Wifi, WifiOff, RefreshCw, Trash2, Copy, CheckCircle, X, AlertTriangle } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 import type { Device } from '../types';
 
 interface ExtendedDevice extends Device {
@@ -11,7 +11,6 @@ interface ExtendedDevice extends Device {
 const ORACLE_URL = import.meta.env.VITE_ORACLE_URL || "http://localhost:8000";
 
 export const DevicesPage = () => {
-  const navigate = useNavigate();
   const [devices, setDevices] = useState<ExtendedDevice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -107,20 +106,16 @@ export const DevicesPage = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      <PageHeader />
       <div className="max-w-4xl mx-auto px-6 py-8">
         
-        {/* Header */}
+        {/* Page Title */}
         <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-semibold flex items-center gap-2">
-                <Server className="w-5 h-5 text-cyan-500" /> Devices
-              </h1>
-              <p className="text-xs text-slate-500">{devices.length} connected</p>
-            </div>
+          <div>
+            <h1 className="text-lg font-semibold flex items-center gap-2">
+              <Server className="w-5 h-5 text-cyan-500" /> Sentry Devices
+            </h1>
+            <p className="text-xs text-slate-500">{devices.length} connected</p>
           </div>
           <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105 active:scale-95">
             <Plus className="w-4 h-4" /> Add
