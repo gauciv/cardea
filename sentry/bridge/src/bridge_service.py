@@ -384,6 +384,19 @@ class BridgeService:
             await asyncio.sleep(30)  # Poll every 30s
             await self.register_with_oracle()
 
+    async def _heartbeat_loop(self):
+        """Background loop to send periodic heartbeats to Oracle"""
+        while True:
+            await asyncio.sleep(60)  # Send heartbeat every 60 seconds
+            
+            # Only send heartbeat if device is claimed (has API key)
+            if self.api_key and not self.is_setup_mode:
+                success = await self.oracle_client.send_heartbeat(self.hardware_id)
+                if success:
+                    logger.debug(f"💓 Heartbeat sent successfully")
+                else:
+                    logger.warning(f"⚠️ Heartbeat failed - Oracle may be unreachable")
+
     async def save_configuration(self, api_key: str):
         """Complete setup by saving the API Key and registering with Oracle"""
         try:
@@ -586,11 +599,15 @@ async def lifespan(app: FastAPI):
     if bridge_service.is_setup_mode:
         reg_task = asyncio.create_task(bridge_service._poll_registration_status())
     
+    # Start heartbeat loop (sends heartbeats when device is claimed)
+    heartbeat_task = asyncio.create_task(bridge_service._heartbeat_loop())
+    
     yield
     
     # Cleanup
     await zeek_notice_monitor.stop()
     notice_task.cancel()
+    heartbeat_task.cancel()
     if reg_task: reg_task.cancel()
     await bridge_service.oracle_client.close()
 
