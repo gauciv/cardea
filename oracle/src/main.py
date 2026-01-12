@@ -44,13 +44,13 @@ try:
     from database import init_database
     from config import settings
     # Import API Routers
-    from api import analytics, actions, devices
+    from api import analytics, actions, devices, alerts
 except ImportError as e:
     logger.warning(f"⚠️ Standard import failed: {e}. Attempting 'src.' fallback...")
     try:
         from src.database import init_database
         from src.config import settings
-        from src.api import analytics, actions, devices
+        from src.api import analytics, actions, devices, alerts
         logger.info("✅ Recovered using 'src.' prefix imports")
     except ImportError as e2:
         logger.critical(f"❌ FATAL: Could not import modules even with fallback: {e2}")
@@ -109,6 +109,7 @@ app.add_middleware(
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
 app.include_router(devices.router, prefix="/api/devices", tags=["Devices"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["Alerts"])
 
 @app.get("/health")
 async def health_check():
