@@ -869,6 +869,102 @@ Use clear, direct language suitable for a small business owner without cybersecu
             logger.error(f"Error indexing threat for RAG: {e}")
             return False
 
+    async def generate_conversational_insight(
+        self,
+        alerts: list[Alert],
+        risk_score: float,
+        threats: list[ThreatInfo]
+    ) -> dict[str, Any]:
+        """
+        Generate conversational AI insight for the dashboard persona.
+        Only calls Azure OpenAI when there are escalated (high/critical) alerts.
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Count escalated alerts
+        severity_counts = Counter(a.severity for a in alerts)
+        critical_count = severity_counts.get("critical", 0) + severity_counts.get(AlertSeverity.CRITICAL.value, 0)
+        high_count = severity_counts.get("high", 0) + severity_counts.get(AlertSeverity.HIGH.value, 0)
+        escalated_count = critical_count + high_count
+        
+        # Determine status emoji based on risk
+        if risk_score >= 0.7 or critical_count > 0:
+            status_emoji = "🔴"
+            risk_level = "high"
+        elif risk_score >= 0.4 or high_count > 0:
+            status_emoji = "🟡"
+            risk_level = "medium"
+        else:
+            status_emoji = "🟢"
+            risk_level = "low"
+        
+        # Only call AI for escalated issues to conserve credits
+        if escalated_count > 0 and self.ai_client:
+            try:
+                context = {
+                    "total_alerts": len(alerts),
+                    "critical_alerts": critical_count,
+                    "high_alerts": high_count,
+                    "risk_score": round(risk_score, 2),
+                    "threat_count": len(threats),
+                    "recent_alerts": [
+                        {"type": a.alert_type, "severity": a.severity, "title": a.title, "source": a.source}
+                        for a in alerts[:5]
+                    ]
+                }
+                
+                prompt = """You are Cardea, a friendly AI security assistant. Generate a brief, conversational security update.
+Be warm but professional. Keep it SHORT (2-3 sentences max).
+Respond in JSON: {"greeting": "...", "headline": "5-7 word summary", "story": "2-3 sentences", "actions_taken": ["action1", "action2"]}"""
+
+                ai_response = await self.reason_with_ai(prompt=prompt, context=context, system_role="You are Cardea, a friendly AI cybersecurity assistant.")
+                
+                if ai_response:
+                    json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
+                    if json_match:
+                        parsed = json.loads(json_match.group())
+                        return {
+                            "greeting": parsed.get("greeting", "Security Update"),
+                            "status_emoji": status_emoji,
+                            "headline": parsed.get("headline", f"{escalated_count} alerts need attention"),
+                            "story": parsed.get("story", "I'm analyzing some security events on your network."),
+                            "actions_taken": parsed.get("actions_taken", []),
+                            "decisions": [],
+                            "technical_summary": f"{len(threats)} threat clusters detected",
+                            "confidence": 0.85,
+                            "generated_at": now.isoformat(),
+                            "ai_powered": True
+                        }
+            except Exception as e:
+                logger.warning(f"AI insight generation failed: {e}")
+        
+        # Fallback: deterministic response
+        hour = now.hour
+        greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
+        
+        if len(alerts) == 0:
+            return {
+                "greeting": greeting, "status_emoji": "🟢", "headline": "All quiet on your network",
+                "story": "No security events detected. Your network is running smoothly.",
+                "actions_taken": [], "decisions": [], "technical_summary": "No alerts in the current time window",
+                "confidence": 1.0, "generated_at": now.isoformat(), "ai_powered": False
+            }
+        
+        if risk_level == "low":
+            story = f"I've processed {len(alerts)} routine events. Everything looks normal."
+        elif risk_level == "medium":
+            story = f"I'm keeping an eye on {high_count} elevated alerts. Nothing critical yet, but I'm monitoring closely."
+        else:
+            story = f"I've detected {critical_count} critical and {high_count} high-priority alerts that need your attention."
+        
+        return {
+            "greeting": greeting, "status_emoji": status_emoji,
+            "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"{escalated_count} alerts need attention",
+            "story": story, "actions_taken": ["Continuous monitoring active", "Threat patterns analyzed"],
+            "decisions": [], "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
+            "confidence": 0.9, "generated_at": now.isoformat(), "ai_powered": False
+        }
+
 
 class AlertCorrelator:
     """Alert correlation and relationship detection"""
@@ -1011,137 +1107,6 @@ class AlertCorrelator:
         
         return correlations
 
-    async def generate_conversational_insight(
-        self,
-        alerts: list[Alert],
-        risk_score: float,
-        threats: list[ThreatInfo]
-    ) -> dict[str, Any]:
-        """
-        Generate conversational AI insight for the dashboard persona.
-        Only calls Azure OpenAI when there are escalated (high/critical) alerts.
-        """
-        now = datetime.now(timezone.utc)
-        
-        # Count escalated alerts
-        severity_counts = Counter(a.severity for a in alerts)
-        critical_count = severity_counts.get("critical", 0) + severity_counts.get(AlertSeverity.CRITICAL.value, 0)
-        high_count = severity_counts.get("high", 0) + severity_counts.get(AlertSeverity.HIGH.value, 0)
-        escalated_count = critical_count + high_count
-        
-        # Determine status emoji based on risk
-        if risk_score >= 0.7 or critical_count > 0:
-            status_emoji = "🔴"
-            risk_level = "high"
-        elif risk_score >= 0.4 or high_count > 0:
-            status_emoji = "🟡"
-            risk_level = "medium"
-        else:
-            status_emoji = "🟢"
-            risk_level = "low"
-        
-        # Only call AI for escalated issues to conserve credits
-        if escalated_count > 0 and self.ai_client:
-            try:
-                context = {
-                    "total_alerts": len(alerts),
-                    "critical_alerts": critical_count,
-                    "high_alerts": high_count,
-                    "risk_score": round(risk_score, 2),
-                    "threat_count": len(threats),
-                    "recent_alerts": [
-                        {
-                            "type": a.alert_type,
-                            "severity": a.severity,
-                            "title": a.title,
-                            "source": a.source
-                        }
-                        for a in alerts[:5]  # Top 5 most recent
-                    ]
-                }
-                
-                prompt = """You are Cardea, a friendly AI security assistant for small businesses. Generate a brief, conversational security update.
-
-Be warm but professional. Speak like a helpful colleague, not a robot. Keep it SHORT (2-3 sentences max for the story).
-
-Respond in JSON format:
-{
-  "greeting": "Good morning!" or time-appropriate greeting,
-  "headline": "Brief 5-7 word summary of the situation",
-  "story": "2-3 sentence conversational explanation of what's happening and what you're doing about it",
-  "actions_taken": ["action 1", "action 2"] - what Cardea is automatically doing
-}
-
-Focus on being reassuring while being honest about threats. Don't be alarmist."""
-
-                ai_response = await self.reason_with_ai(
-                    prompt=prompt,
-                    context=context,
-                    system_role="You are Cardea, a friendly AI cybersecurity assistant. Be warm, concise, and helpful."
-                )
-                
-                if ai_response:
-                    # Parse JSON from response
-                    json_match = re.search(r'\{[^{}]*\}', ai_response, re.DOTALL)
-                    if json_match:
-                        parsed = json.loads(json_match.group())
-                        return {
-                            "greeting": parsed.get("greeting", "Security Update"),
-                            "status_emoji": status_emoji,
-                            "headline": parsed.get("headline", f"{escalated_count} alerts need attention"),
-                            "story": parsed.get("story", "I'm analyzing some security events on your network."),
-                            "actions_taken": parsed.get("actions_taken", []),
-                            "decisions": [],
-                            "technical_summary": f"{len(threats)} threat clusters detected",
-                            "confidence": 0.85,
-                            "generated_at": now.isoformat(),
-                            "ai_powered": True
-                        }
-            except Exception as e:
-                logger.warning(f"AI insight generation failed: {e}")
-        
-        # Fallback: deterministic response (no AI call)
-        hour = now.hour
-        if hour < 12:
-            greeting = "Good morning!"
-        elif hour < 17:
-            greeting = "Good afternoon!"
-        else:
-            greeting = "Good evening!"
-        
-        if len(alerts) == 0:
-            return {
-                "greeting": greeting,
-                "status_emoji": "🟢",
-                "headline": "All quiet on your network",
-                "story": "No security events detected. Your network is running smoothly.",
-                "actions_taken": [],
-                "decisions": [],
-                "technical_summary": "No alerts in the current time window",
-                "confidence": 1.0,
-                "generated_at": now.isoformat(),
-                "ai_powered": False
-            }
-        
-        if risk_level == "low":
-            story = f"I've processed {len(alerts)} routine events. Everything looks normal."
-        elif risk_level == "medium":
-            story = f"I'm keeping an eye on {high_count} elevated alerts. Nothing critical yet, but I'm monitoring closely."
-        else:
-            story = f"I've detected {critical_count} critical and {high_count} high-priority alerts that need your attention."
-        
-        return {
-            "greeting": greeting,
-            "status_emoji": status_emoji,
-            "headline": f"{len(alerts)} events monitored" if risk_level == "low" else f"{escalated_count} alerts need attention",
-            "story": story,
-            "actions_taken": ["Continuous monitoring active", "Threat patterns analyzed"],
-            "decisions": [],
-            "technical_summary": f"{len(threats)} threat clusters, risk score: {round(risk_score * 100)}%",
-            "confidence": 0.9,
-            "generated_at": now.isoformat(),
-            "ai_powered": False
-        }
 
 # Initialize the Analyzer Global Instance
 analyzer = ThreatAnalyzer()
