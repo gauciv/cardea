@@ -19,20 +19,32 @@ export interface ActionButton {
   description: string;
 }
 
+export interface ActiveThreat {
+  id: string;
+  type: string;
+  description: string;
+  source_ip: string;
+  alert_count: number;
+  severity: string;
+  first_seen: string;
+  status: 'pending' | 'executing' | 'resolved';
+}
+
 export interface AIInsight {
   // New conversational format
   greeting: string;
   status_emoji: string;
   headline: string;
   story: string;
-  question?: string;  // Question for user when decision needed
+  question?: string;
   actions_taken: string[];
   decisions: ActionButton[];
+  active_threat?: ActiveThreat | null;
   technical_summary?: string;
   confidence: number;
   generated_at?: string;
   ai_powered: boolean;
-  rag_enhanced?: boolean;  // True if historical context was used
+  rag_enhanced?: boolean;
   
   // Legacy fields for backward compatibility
   summary?: string;

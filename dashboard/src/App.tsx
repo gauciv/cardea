@@ -4,7 +4,7 @@ import { RefreshCw, AlertTriangle, Eye, BarChart3 } from "lucide-react";
 import { UserMenu } from "./components/UserMenu";
 import { useAuth } from "./lib/useAuth";
 import { Toast } from "./components/common";
-import { AIPersona, SimpleStats, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel } from "./components/dashboard";
+import { AIPersona, SimpleStats, NoDevicesState, ThreatMap, AlertTimeline, ActionableAlertsPanel, ActionCenter } from "./components/dashboard";
 import { OnboardingOverlay } from "./components/onboarding";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useOnboarding } from "./hooks/useOnboarding";
@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const isDev = import.meta.env.DEV;
   const effectiveAuth = isDev || isAuthenticated;
 
-  const { data, isLoading, hasDevices, devices, error } = useDashboardData(effectiveAuth);
+  const { data, isLoading, hasDevices, devices, error, refetch } = useDashboardData(effectiveAuth);
   const { showOnboarding, onboardingStep, nextStep, skip } = useOnboarding(hasDevices);
   
   const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
@@ -107,19 +107,34 @@ const App: React.FC = () => {
               riskLevel={riskLevel}
             />
             
-            {/* Simple Mode: Just status cards */}
+            {/* Simple Mode: Status cards + Action Center */}
             {viewMode === "simple" && (
-              <SimpleStats 
-                deviceStatus={deviceStatus} 
-                riskLevel={riskLevel}
-                deviceName={primaryDevice?.name}
-              />
+              <>
+                <SimpleStats 
+                  deviceStatus={deviceStatus} 
+                  riskLevel={riskLevel}
+                  deviceName={primaryDevice?.name}
+                />
+                {/* Action Center - shows grouped threat with action buttons */}
+                <ActionCenter 
+                  threat={data?.ai_insight?.active_threat}
+                  decisions={data?.ai_insight?.decisions || []}
+                  onResolved={() => refetch()}
+                />
+              </>
             )}
             
             {/* Detailed Mode: Full analytics */}
             {viewMode === "detailed" && (
               <>
                 <SimpleStats deviceStatus={deviceStatus} riskLevel={riskLevel} deviceName={primaryDevice?.name} />
+                
+                {/* Action Center */}
+                <ActionCenter 
+                  threat={data?.ai_insight?.active_threat}
+                  decisions={data?.ai_insight?.decisions || []}
+                  onResolved={() => refetch()}
+                />
                 
                 {/* Threat Map */}
                 <ThreatMap alerts={data?.alerts || []} isLoading={isLoading && !data} />

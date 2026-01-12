@@ -7,3 +7,4 @@ export { ThreatMap } from './ThreatMap';
 export { AlertTimeline } from './AlertTimeline';
 export { ActionableAlertsPanel } from './ActionableAlerts';
 export { SentryHealth } from './SentryHealth';
+export { ActionCenter } from './ActionCenter';

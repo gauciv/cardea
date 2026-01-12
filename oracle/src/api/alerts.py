@@ -85,3 +85,19 @@ async def receive_alert(req: AlertRequest, background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"❌ Failed to store alert: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/clear")
+async def clear_all_alerts():
+    """Clear all alerts from database (for demo/testing)"""
+    try:
+        from sqlalchemy import delete
+        async with get_db() as db:
+            result = await db.execute(delete(Alert))
+            await db.commit()
+            count = result.rowcount
+            logger.info(f"🗑️ Cleared {count} alerts from database")
+            return {"success": True, "deleted": count}
+    except Exception as e:
+        logger.error(f"Failed to clear alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

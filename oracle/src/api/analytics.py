@@ -940,61 +940,18 @@ Use clear, direct language suitable for a small business owner without cybersecu
         threats: list[ThreatInfo]
     ) -> dict[str, Any]:
         """
-        Generate conversational AI insight for the dashboard persona.
-        Uses deterministic responses with specific details - NO AI calls for routine updates.
-        AI only called for NEW escalated situations that haven't been addressed.
+        Generate simple, grouped insight for dashboard.
+        Groups related alerts into ONE actionable item.
         """
         now = datetime.now(timezone.utc)
         
-        # Count by severity
-        severity_counts = Counter(a.severity for a in alerts)
-        critical_count = severity_counts.get("critical", 0) + severity_counts.get(AlertSeverity.CRITICAL.value, 0)
-        high_count = severity_counts.get("high", 0) + severity_counts.get(AlertSeverity.HIGH.value, 0)
-        medium_count = severity_counts.get("medium", 0) + severity_counts.get(AlertSeverity.MEDIUM.value, 0)
-        escalated_count = critical_count + high_count
+        # Use local hour for greeting (assume +8 for demo)
+        local_hour = (now.hour + 8) % 24
+        greeting = "Good morning!" if local_hour < 12 else ("Good afternoon!" if local_hour < 17 else "Good evening!")
         
-        # Cache key includes alert IDs to detect NEW alerts
-        alert_ids = tuple(sorted(a.id for a in alerts[:20]))
-        cache_key = f"insight_{hash(alert_ids)}_{escalated_count}"
-        
-        # 5 minute cache - don't regenerate for same situation
-        self._cache_ttl = timedelta(minutes=5)
-        cached = self._get_cached(cache_key)
-        if cached:
-            logger.info("📦 Using cached insight (5min TTL)")
-            return cached
-        
-        # Extract specific details from alerts
-        source_ips = []
-        alert_types = Counter()
-        alert_sources = Counter()
-        
-        for a in alerts[:10]:
-            alert_types[a.alert_type] += 1
-            alert_sources[a.source] += 1
-            if a.raw_data:
-                ip = a.raw_data.get("src_ip") or a.raw_data.get("source_ip")
-                if ip and ip not in source_ips:
-                    source_ips.append(ip)
-        
-        # Determine status
-        if risk_score >= 0.7 or critical_count > 0:
-            status_emoji = "🔴"
-            risk_level = "high"
-        elif risk_score >= 0.4 or high_count > 0:
-            status_emoji = "🟡" 
-            risk_level = "medium"
-        else:
-            status_emoji = "🟢"
-            risk_level = "low"
-        
-        # Time-based greeting
-        hour = now.hour
-        greeting = "Good morning!" if hour < 12 else ("Good afternoon!" if hour < 17 else "Good evening!")
-        
-        # Build SPECIFIC message based on what we actually found
+        # No alerts = all clear
         if len(alerts) == 0:
-            result = {
+            return {
                 "greeting": greeting,
                 "status_emoji": "🟢",
                 "headline": "All clear",
@@ -1002,97 +959,110 @@ Use clear, direct language suitable for a small business owner without cybersecu
                 "question": "",
                 "actions_taken": [],
                 "decisions": [],
+                "active_threat": None,
                 "technical_summary": "No alerts",
                 "confidence": 1.0,
                 "generated_at": now.isoformat(),
                 "ai_powered": False
             }
-            self._set_cached(cache_key, result)
-            return result
         
-        # Get historical context from RAG (if available)
-        historical_context = await self.get_historical_context(alerts)
-        has_history = len(historical_context) > 0
+        # GROUP alerts by type - treat all same-type alerts as ONE problem
+        alert_groups = {}
+        for a in alerts:
+            key = a.alert_type
+            if key not in alert_groups:
+                alert_groups[key] = {
+                    "type": a.alert_type,
+                    "alerts": [],
+                    "source_ips": set(),
+                    "first_seen": a.timestamp,
+                    "last_seen": a.timestamp,
+                    "severities": []
+                }
+            group = alert_groups[key]
+            group["alerts"].append(a)
+            group["severities"].append(a.severity)
+            group["last_seen"] = max(group["last_seen"], a.timestamp)
+            group["first_seen"] = min(group["first_seen"], a.timestamp)
+            if a.raw_data:
+                ip = a.raw_data.get("src_ip") or a.raw_data.get("source_ip")
+                if ip:
+                    group["source_ips"].add(ip)
         
-        # Build specific description of what was found
-        top_type = alert_types.most_common(1)[0][0] if alert_types else "activity"
-        top_source = alert_sources.most_common(1)[0][0] if alert_sources else "your network"
+        # Find the most severe group (the ONE problem to show)
+        severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
         
-        # Translate alert types to plain English
+        def group_severity(g):
+            return max(severity_order.get(s, 0) for s in g["severities"])
+        
+        primary_group = max(alert_groups.values(), key=group_severity)
+        primary_type = primary_group["type"]
+        alert_count = len(primary_group["alerts"])
+        source_ips = list(primary_group["source_ips"])[:3]
+        max_severity = max(primary_group["severities"], key=lambda s: severity_order.get(s, 0))
+        
+        # Determine risk level from the primary group
+        if max_severity in ("critical", "high"):
+            status_emoji = "🟡"  # Yellow - needs attention but not panic
+            risk_level = "medium"
+        else:
+            status_emoji = "🟢"
+            risk_level = "low"
+        
+        # Plain English descriptions
         type_descriptions = {
-            "network_anomaly": "unusual network traffic patterns",
-            "intrusion_detection": "someone trying to access your system",
-            "malware_detection": "potentially harmful software",
-            "suspicious_behavior": "unusual behavior on your network",
-            "data_exfiltration": "data being sent outside your network",
-            "unauthorized_access": "an unauthorized login attempt"
+            "network_anomaly": "unusual network activity",
+            "intrusion_detection": "a potential intrusion attempt", 
+            "malware_detection": "suspicious software activity",
+            "suspicious_behavior": "unusual behavior",
+            "data_exfiltration": "unusual data transfer",
+            "unauthorized_access": "an unauthorized access attempt"
         }
-        what_found = type_descriptions.get(top_type, f"unusual activity ({top_type})")
+        what_found = type_descriptions.get(primary_type, "unusual activity")
         
-        # Check if we've seen this pattern before (RAG enhancement)
-        seen_before = False
-        past_resolution = None
-        if historical_context:
-            for past in historical_context:
-                if past.get("alert_type") == top_type:
-                    seen_before = True
-                    if past.get("resolution"):
-                        past_resolution = past.get("resolution")
-                    break
-        
-        # Build decisions based on what we found
+        # Build ONE simple decision for the user
         decisions = []
-        if escalated_count > 0 and source_ips:
+        active_threat = None
+        
+        if source_ips and max_severity in ("critical", "high", "medium"):
             primary_ip = source_ips[0]
+            active_threat = {
+                "id": f"threat_{primary_type}",
+                "type": primary_type,
+                "description": what_found,
+                "source_ip": primary_ip,
+                "alert_count": alert_count,
+                "severity": max_severity,
+                "first_seen": primary_group["first_seen"].isoformat(),
+                "status": "pending"  # pending, executing, resolved
+            }
             decisions = [
-                {"id": "safe", "label": "I recognize this - it's safe", "action_type": "dismiss", "severity": "success", "target": primary_ip, "description": f"Mark {primary_ip} as trusted"},
-                {"id": "block", "label": f"Block {primary_ip}", "action_type": "block_ip", "severity": "danger", "target": primary_ip, "description": f"Block all traffic from {primary_ip}"},
-                {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "target": primary_ip, "description": "Don't act yet, but keep me informed"}
+                {"id": "safe", "label": "It's safe - ignore", "action_type": "dismiss", "severity": "success", "target": primary_ip, "description": "This is expected activity"},
+                {"id": "block", "label": f"Block {primary_ip}", "action_type": "block_ip", "severity": "danger", "target": primary_ip, "description": "Block this source"},
             ]
-        
-        # Build the story with SPECIFIC details and RAG context
-        history_note = ""
-        if seen_before:
-            history_note = " I've seen similar activity before on your network."
-            if past_resolution:
-                history_note += f" Last time, it was resolved by: {past_resolution}"
-        
-        if risk_level == "low":
-            story = f"I've logged {len(alerts)} routine events from {top_source}. Nothing concerning - just keeping track."
+            story = f"I've detected {what_found} ({alert_count} events) from {primary_ip}. What would you like me to do?"
             question = ""
-            decisions = []  # No action needed for low risk
-        elif risk_level == "medium":
-            if source_ips:
-                story = f"I detected {what_found} from IP address {source_ips[0]}. This triggered {high_count} elevated alerts.{history_note} It might be normal activity, but I wanted to check with you first."
-                question = f"Do you recognize activity from {source_ips[0]}?"
-            else:
-                story = f"I noticed {what_found} - {high_count} events that look a bit unusual.{history_note} Could be nothing, but worth a quick look."
-                question = "Does this sound like expected activity?"
-        else:  # high risk
-            if source_ips:
-                story = f"⚠️ I found {what_found} from {source_ips[0]}. This looks suspicious - {critical_count + high_count} serious alerts.{history_note} I haven't blocked anything yet because I want your call first."
-                question = f"Should I block {source_ips[0]}?"
-            else:
-                story = f"⚠️ Detected {what_found} with {critical_count + high_count} serious alerts.{history_note} This needs attention."
-                question = "What would you like me to do?"
+        elif alert_count > 0:
+            story = f"I've logged {alert_count} {what_found} events. Nothing critical - just keeping track."
+            question = ""
+        else:
+            story = "Your network looks normal."
+            question = ""
         
-        result = {
+        return {
             "greeting": greeting,
             "status_emoji": status_emoji,
-            "headline": f"{what_found.capitalize()}" if escalated_count > 0 else f"{len(alerts)} events logged",
+            "headline": what_found.capitalize() if active_threat else "All monitored",
             "story": story,
             "question": question,
-            "actions_taken": [f"Monitoring {top_source}", f"Analyzed {len(alerts)} events"] + (["Checked historical patterns"] if has_history else []),
+            "actions_taken": [f"Grouped {len(alerts)} alerts into {len(alert_groups)} categories"],
             "decisions": decisions,
-            "technical_summary": f"{len(alerts)} alerts, {escalated_count} escalated, risk: {round(risk_score * 100)}%",
-            "confidence": 0.95 if has_history else 0.9,  # Higher confidence with RAG
+            "active_threat": active_threat,
+            "technical_summary": f"{len(alerts)} total alerts, {len(alert_groups)} groups",
+            "confidence": 0.9,
             "generated_at": now.isoformat(),
-            "ai_powered": False,  # Deterministic - no AI tokens used!
-            "rag_enhanced": has_history
+            "ai_powered": False
         }
-        
-        self._set_cached(cache_key, result)
-        return result
 
 
 class AlertCorrelator:

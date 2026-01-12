@@ -1,9 +1,50 @@
 # Project Cardea - Comprehensive Context Documentation
 
-> **Last Updated:** January 6, 2026  
+> **Last Updated:** January 12, 2026  
 > **License:** MIT License  
 > **Repository:** gauciv/cardea  
 > **Branch:** main
+
+---
+
+## Recent Changes (January 12, 2026)
+
+### AI Persona & Action Center Overhaul
+- **Grouped Alerts**: Oracle now groups related alerts by type into ONE actionable item
+- **Simplified Flow**: AI shows one problem at a time, waits for user decision
+- **Action Center Component**: New UI component with execution tracking
+  - Shows grouped threat with source IP and event count
+  - Two action buttons: "It's safe - ignore" or "Block [IP]"
+  - Expandable dropdown showing execution steps
+  - Visual feedback: pending → running → success/error
+  - Auto-collapses and shows "Threat Resolved" on success
+
+### Token Optimization
+- **100% Deterministic Insights**: No AI tokens used for routine monitoring
+- **5-minute Cache TTL**: Same situation won't regenerate
+- **Cache key based on alert IDs**: Only regenerates when NEW alerts arrive
+
+### Azure AI Search Integration
+- **RAG-Enhanced Analysis**: Historical threat context for better recommendations
+- **Auto-Index Creation**: Search index created on startup
+- **Resolution Tracking**: User actions stored for future reference
+- **Background Indexing**: High-severity alerts indexed asynchronously
+
+### API Endpoints Added
+- `DELETE /api/alerts/clear` - Clear all alerts (for demo/testing)
+- `POST /api/actions/execute` - Execute user actions with safety checks
+- `GET /api/actions/dismissed` - Get dismissed alerts and safe IPs
+
+### Dashboard Components
+- `ActionCenter.tsx` - Grouped threat display with execution tracking
+- Simplified `AIPersona.tsx` - Just shows message, actions moved to ActionCenter
+- Fixed timezone for greeting (uses local time +8)
+
+### Environment Variables Required
+```
+AZURE_SEARCH_ENDPOINT=https://<your-search>.search.windows.net
+AZURE_SEARCH_KEY=<your-admin-key>
+```
 
 ---
 
