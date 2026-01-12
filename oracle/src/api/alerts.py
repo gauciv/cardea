@@ -1,7 +1,7 @@
 """
 Alerts API - Receives alerts from Sentry devices
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, Any
 from datetime import datetime, timezone
@@ -9,8 +9,10 @@ import logging
 
 try:
     from database import get_db, Alert
+    from api.analytics import analyzer
 except ImportError:
     from src.database import get_db, Alert
+    from src.api.analytics import analyzer
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -31,10 +33,23 @@ class AlertResponse(BaseModel):
     alert_id: int
     message: str
 
+
+async def index_alert_for_rag(alert: Alert):
+    """Background task to index high-severity alerts for RAG"""
+    try:
+        if alert.severity in ("high", "critical"):
+            # Calculate a basic threat score
+            score = 0.8 if alert.severity == "critical" else 0.6
+            await analyzer.index_threat_for_rag(alert, score)
+    except Exception as e:
+        logger.warning(f"Background RAG indexing failed: {e}")
+
+
 @router.post("", response_model=AlertResponse)
-async def receive_alert(req: AlertRequest):
+async def receive_alert(req: AlertRequest, background_tasks: BackgroundTasks):
     """
     Receive and store an alert from Sentry or external source.
+    High-severity alerts are indexed to Azure AI Search for RAG.
     """
     logger.info(f"📥 Received alert: [{req.severity.upper()}] {req.title}")
     
@@ -56,6 +71,10 @@ async def receive_alert(req: AlertRequest):
             await db.refresh(alert)
             
             logger.info(f"✅ Alert stored with ID: {alert.id}")
+            
+            # Index high-severity alerts for RAG in background
+            if alert.severity in ("high", "critical"):
+                background_tasks.add_task(index_alert_for_rag, alert)
             
             return AlertResponse(
                 success=True,

@@ -92,6 +92,44 @@ class ThreatAnalyzer:
             "behavioral_patterns": {}
         }
 
+    async def get_historical_context(self, alerts: list[Alert], top: int = 3) -> list[dict]:
+        """
+        Get historical threat context from Azure AI Search for RAG.
+        Returns similar past threats to provide context for current alerts.
+        """
+        if not self.search_service or not self.search_service.search_client:
+            return []
+        
+        if not alerts:
+            return []
+        
+        try:
+            # Build query from recent alerts
+            query_parts = []
+            for a in alerts[:5]:
+                query_parts.append(f"{a.alert_type} {a.title}")
+            query = " ".join(query_parts)
+            
+            # Get most common alert type for filtering
+            alert_types = Counter(a.alert_type for a in alerts)
+            primary_type = alert_types.most_common(1)[0][0] if alert_types else None
+            
+            similar = await self.search_service.search_similar_threats(
+                query=query,
+                alert_type=primary_type,
+                top=top,
+                min_score=0.4
+            )
+            
+            if similar:
+                logger.info(f"📚 Found {len(similar)} historical threats for RAG context")
+            
+            return similar
+            
+        except Exception as e:
+            logger.warning(f"RAG context retrieval failed: {e}")
+            return []
+
     def _get_cached(self, key: str) -> Any | None:
         """Get cached value if not expired"""
         if key in self._cache:
@@ -972,6 +1010,10 @@ Use clear, direct language suitable for a small business owner without cybersecu
             self._set_cached(cache_key, result)
             return result
         
+        # Get historical context from RAG (if available)
+        historical_context = await self.get_historical_context(alerts)
+        has_history = len(historical_context) > 0
+        
         # Build specific description of what was found
         top_type = alert_types.most_common(1)[0][0] if alert_types else "activity"
         top_source = alert_sources.most_common(1)[0][0] if alert_sources else "your network"
@@ -987,6 +1029,17 @@ Use clear, direct language suitable for a small business owner without cybersecu
         }
         what_found = type_descriptions.get(top_type, f"unusual activity ({top_type})")
         
+        # Check if we've seen this pattern before (RAG enhancement)
+        seen_before = False
+        past_resolution = None
+        if historical_context:
+            for past in historical_context:
+                if past.get("alert_type") == top_type:
+                    seen_before = True
+                    if past.get("resolution"):
+                        past_resolution = past.get("resolution")
+                    break
+        
         # Build decisions based on what we found
         decisions = []
         if escalated_count > 0 and source_ips:
@@ -997,24 +1050,30 @@ Use clear, direct language suitable for a small business owner without cybersecu
                 {"id": "monitor", "label": "Keep watching", "action_type": "monitor", "severity": "warning", "target": primary_ip, "description": "Don't act yet, but keep me informed"}
             ]
         
-        # Build the story with SPECIFIC details
+        # Build the story with SPECIFIC details and RAG context
+        history_note = ""
+        if seen_before:
+            history_note = " I've seen similar activity before on your network."
+            if past_resolution:
+                history_note += f" Last time, it was resolved by: {past_resolution}"
+        
         if risk_level == "low":
             story = f"I've logged {len(alerts)} routine events from {top_source}. Nothing concerning - just keeping track."
             question = ""
             decisions = []  # No action needed for low risk
         elif risk_level == "medium":
             if source_ips:
-                story = f"I detected {what_found} from IP address {source_ips[0]}. This triggered {high_count} elevated alerts. It might be normal activity, but I wanted to check with you first."
+                story = f"I detected {what_found} from IP address {source_ips[0]}. This triggered {high_count} elevated alerts.{history_note} It might be normal activity, but I wanted to check with you first."
                 question = f"Do you recognize activity from {source_ips[0]}?"
             else:
-                story = f"I noticed {what_found} - {high_count} events that look a bit unusual. Could be nothing, but worth a quick look."
+                story = f"I noticed {what_found} - {high_count} events that look a bit unusual.{history_note} Could be nothing, but worth a quick look."
                 question = "Does this sound like expected activity?"
         else:  # high risk
             if source_ips:
-                story = f"⚠️ I found {what_found} from {source_ips[0]}. This looks suspicious - {critical_count + high_count} serious alerts. I haven't blocked anything yet because I want your call first."
+                story = f"⚠️ I found {what_found} from {source_ips[0]}. This looks suspicious - {critical_count + high_count} serious alerts.{history_note} I haven't blocked anything yet because I want your call first."
                 question = f"Should I block {source_ips[0]}?"
             else:
-                story = f"⚠️ Detected {what_found} with {critical_count + high_count} serious alerts. This needs attention."
+                story = f"⚠️ Detected {what_found} with {critical_count + high_count} serious alerts.{history_note} This needs attention."
                 question = "What would you like me to do?"
         
         result = {
@@ -1023,12 +1082,13 @@ Use clear, direct language suitable for a small business owner without cybersecu
             "headline": f"{what_found.capitalize()}" if escalated_count > 0 else f"{len(alerts)} events logged",
             "story": story,
             "question": question,
-            "actions_taken": [f"Monitoring {top_source}", f"Analyzed {len(alerts)} events"],
+            "actions_taken": [f"Monitoring {top_source}", f"Analyzed {len(alerts)} events"] + (["Checked historical patterns"] if has_history else []),
             "decisions": decisions,
             "technical_summary": f"{len(alerts)} alerts, {escalated_count} escalated, risk: {round(risk_score * 100)}%",
-            "confidence": 0.9,
+            "confidence": 0.95 if has_history else 0.9,  # Higher confidence with RAG
             "generated_at": now.isoformat(),
-            "ai_powered": False  # Deterministic - no AI tokens used!
+            "ai_powered": False,  # Deterministic - no AI tokens used!
+            "rag_enhanced": has_history
         }
         
         self._set_cached(cache_key, result)

@@ -56,6 +56,29 @@ dismissed_alerts: set[int] = set()
 safe_ips: set[str] = set()
 
 
+async def update_threat_resolution(target: str, action_type: str, reason: str):
+    """Update threat resolution in Azure AI Search for future RAG queries"""
+    try:
+        from api.analytics import analyzer
+        if analyzer.search_service and analyzer.search_service.search_client:
+            # Search for threats matching this target
+            results = await analyzer.search_service.search_similar_threats(
+                query=target,
+                top=5,
+                min_score=0.3
+            )
+            
+            for threat in results:
+                if target in str(threat.get("indicators", [])) or target in str(threat.get("network_context", {})):
+                    # Update with resolution
+                    resolution = f"User marked as {action_type}: {reason}" if reason else f"User action: {action_type}"
+                    threat["resolution"] = resolution
+                    await analyzer.search_service.index_threat(threat)
+                    logger.info(f"📝 Updated threat resolution: {threat.get('threat_id')}")
+    except Exception as e:
+        logger.warning(f"Could not update threat resolution: {e}")
+
+
 @router.post("/execute", response_model=ActionResult)
 async def execute_action(request: ActionRequest):
     """
@@ -79,6 +102,8 @@ async def execute_action(request: ActionRequest):
                 dismissed_alerts.update(request.alert_ids)
             if request.target:
                 safe_ips.add(request.target)
+                # Update RAG with resolution
+                await update_threat_resolution(request.target, "safe", request.reason or "User confirmed safe")
             
             return ActionResult(
                 success=True,
@@ -107,6 +132,8 @@ async def execute_action(request: ActionRequest):
             )
             
             if result["success"]:
+                # Update RAG with resolution
+                await update_threat_resolution(request.target, "blocked", request.reason or "User blocked IP")
                 return ActionResult(
                     success=True,
                     action_type=request.action_type,

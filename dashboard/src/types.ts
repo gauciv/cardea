@@ -32,6 +32,7 @@ export interface AIInsight {
   confidence: number;
   generated_at?: string;
   ai_powered: boolean;
+  rag_enhanced?: boolean;  // True if historical context was used
   
   // Legacy fields for backward compatibility
   summary?: string;
